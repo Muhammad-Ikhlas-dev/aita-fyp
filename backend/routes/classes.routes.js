@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const mongoose = require('mongoose');
 const Class = require('../schemas/Class');
 const Enrollment = require('../schemas/Enrollment');
 const Student = require('../schemas/Student');
@@ -34,8 +35,27 @@ const upload = multer({
 router.get('/', async (req, res) => {
   try {
     const { createdBy } = req.query;
-    const filter = createdBy ? { createdBy } : {};
-    const list = await Class.find(filter).sort({ createdAt: -1 }).lean();
+    const matchStage = createdBy && mongoose.Types.ObjectId.isValid(createdBy)
+      ? { createdBy: new mongoose.Types.ObjectId(createdBy) }
+      : {};
+    const list = await Class.aggregate([
+      { $match: matchStage },
+      { $sort: { createdAt: -1 } },
+      {
+        $lookup: {
+          from: 'enrollments',
+          localField: '_id',
+          foreignField: 'classId',
+          as: '_enrollments'
+        }
+      },
+      {
+        $addFields: {
+          studentCount: { $size: '$_enrollments' }
+        }
+      },
+      { $project: { _enrollments: 0 } }
+    ]);
     res.json({
       success: true,
       classes: list,

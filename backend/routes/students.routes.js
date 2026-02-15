@@ -1,7 +1,9 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const mongoose = require('mongoose');
 const Student = require('../schemas/Student');
+const LabeledImage = require('../schemas/LabeledImage');
 
 const router = express.Router();
 const uploadDir = path.join(__dirname, '..', 'labeled_images');
@@ -43,78 +45,61 @@ router.get('/lookup', async (req, res) => {
   }
 });
 
-router.get('/', (req, res) => {
-    try {
-        const files = fs.readdirSync(uploadDir);
-
-        const studentMap = new Map();
-
-        files
-            .filter(file => /\.(jpg|jpeg|png|gif)$/i.test(file))
-            .forEach(file => {
-                const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
-                const parts = nameWithoutExt.split('_');
-
-                if (parts.length > 1 && /^\d+$/.test(parts[parts.length - 1])) {
-                    parts.pop();
-                }
-
-                const studentName = parts.join('_');
-
-                if (!studentMap.has(studentName)) {
-                    const ext = file.split('.').pop();
-                    studentMap.set(studentName, {
-                        name: studentName,
-                        filename: file,
-                        extension: ext,
-                        url: `/labeled_images/${file}`
-                    });
-                }
-            });
-
-        const students = Array.from(studentMap.values());
-
-        res.json({
-            success: true,
-            students,
-            count: students.length
-        });
-    } catch (error) {
-        console.error('Error reading students:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error reading student data',
-            error: error.message
-        });
-    }
+router.get('/', async (req, res) => {
+  try {
+    const { classId } = req.query;
+    const filter = classId && mongoose.Types.ObjectId.isValid(classId)
+      ? { classId: new mongoose.Types.ObjectId(classId) }
+      : {};
+    const docs = await LabeledImage.find(filter).sort({ label: 1, uploadedAt: -1 }).lean();
+    const students = docs.map((d) => ({
+      name: d.label,
+      filename: d.filename,
+      url: d.path,
+      extension: path.extname(d.filename).replace(/^\./, '') || 'jpg'
+    }));
+    res.json({
+      success: true,
+      students,
+      count: students.length
+    });
+  } catch (error) {
+    console.error('Error reading students:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error reading student data',
+      error: error.message
+    });
+  }
 });
 
-router.delete('/:filename', (req, res) => {
-    try {
-        const { filename } = req.params;
-        const filePath = path.join(uploadDir, filename);
-
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({
-                success: false,
-                message: 'Student not found'
-            });
-        }
-
-        fs.unlinkSync(filePath);
-
-        res.json({
-            success: true,
-            message: 'Student deleted successfully'
-        });
-    } catch (error) {
-        console.error('Error deleting student:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error deleting student',
-            error: error.message
-        });
+router.delete('/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const doc = await LabeledImage.findOne({ filename });
+    if (!doc) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
     }
+    const filePath = path.join(uploadDir, filename);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    await LabeledImage.deleteOne({ filename });
+    res.json({
+      success: true,
+      message: 'Student deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting student:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting student',
+      error: error.message
+    });
+  }
 });
 
 module.exports = router;

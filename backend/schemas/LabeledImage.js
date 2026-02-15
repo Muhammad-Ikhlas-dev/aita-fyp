@@ -1,8 +1,6 @@
-// models/LabeledImage.js
 const mongoose = require('mongoose');
 
 const labeledImageSchema = new mongoose.Schema({
-  // Put fields that make sense for your face recognition / attendance system
   filename: {
     type: String,
     required: true,
@@ -14,37 +12,33 @@ const labeledImageSchema = new mongoose.Schema({
   },
   path: {
     type: String,
-    required: true  // e.g. '/labeled_images/user123_label.jpg'
+    required: true
   },
   label: {
     type: String,
-    required: true,          // e.g. "Muhammad", "Student001", etc.
-    index: true              // good for fast lookups by name/ID
+    required: true,
+    trim: true,
+    index: true
   },
-  userId: {
+  classId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',             // if you have users collection later
-    required: false
+    ref: 'Class',
+    default: null,
+    index: true
   },
   uploadedAt: {
     type: Date,
     default: Date.now
   },
   size: {
-    type: Number             // in bytes
+    type: Number
   },
   mimeType: {
-    type: String             // e.g. "image/jpeg"
-  },
-  // Optional: if you're storing embeddings (face vectors)
-  embedding: {
-    type: [Number],          // array of numbers (e.g. 128 or 512-dim vector)
-    required: false
+    type: String
   }
 }, {
-  timestamps: true           // auto adds createdAt & updatedAt
+  timestamps: true,
+  collection: 'labeled_images'
 });
 
-// Create and export the model
-// Mongoose will use "labeled_images" as collection name (pluralized lowercase)
 module.exports = mongoose.model('LabeledImage', labeledImageSchema);

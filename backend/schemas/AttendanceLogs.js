@@ -19,6 +19,12 @@ const studentEntrySchema = new mongoose.Schema({
 }, { _id: false });
 
 const attendanceLogSchema = new mongoose.Schema({
+  classId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class',
+    default: null,
+    index: true
+  },
   timestamp: {
     type: Date,
     required: true,
