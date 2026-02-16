@@ -103,7 +103,7 @@ function CameraModal({ setShowCamera, showCamera, classId, onAttendanceMarked })
         try {
             console.log('Marking attendance for:', recognizedStudents);
 
-            // Call backend API to mark attendance
+            // API: POST /api/attendance/mark — save attendance log (students, timestamp, optional classId)
             const payload = {
                 students: recognizedStudents,
                 timestamp: new Date().toISOString()

@@ -32,6 +32,7 @@ const upload = multer({
   }
 });
 
+// GET /api/classes — list classes, optionally filtered by teacher (createdBy); includes studentCount from enrollments
 router.get('/', async (req, res) => {
   try {
     const { createdBy } = req.query;
@@ -71,6 +72,7 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/classes/:id — fetch a single class by id
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -95,7 +97,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Class students (enrollments) - more specific routes first
+// GET /api/classes/:classId/students — list students enrolled in a class (from Enrollment + Student)
 router.get('/:classId/students', async (req, res) => {
   try {
     const { classId } = req.params;
@@ -134,6 +136,7 @@ router.get('/:classId/students', async (req, res) => {
   }
 });
 
+// POST /api/classes/:classId/students — add a student to a class (create Enrollment)
 router.post('/:classId/students', async (req, res) => {
   try {
     const { classId } = req.params;
@@ -193,6 +196,7 @@ router.post('/:classId/students', async (req, res) => {
   }
 });
 
+// DELETE /api/classes/:classId/students/:studentId — remove a student from a class (delete Enrollment)
 router.delete('/:classId/students/:studentId', async (req, res) => {
   try {
     const { classId, studentId } = req.params;
@@ -217,9 +221,37 @@ router.delete('/:classId/students/:studentId', async (req, res) => {
   }
 });
 
+// DELETE /api/classes/:id — delete a class and all its enrollments
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const classDoc = await Class.findById(id);
+    if (!classDoc) {
+      return res.status(404).json({
+        success: false,
+        message: 'Class not found'
+      });
+    }
+    await Enrollment.deleteMany({ classId: id });
+    await Class.findByIdAndDelete(id);
+    res.json({
+      success: true,
+      message: 'Class deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete class error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting class',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/classes — create a new class (with optional cover image and scheduleSlots)
 router.post('/', upload.single('cover'), async (req, res) => {
   try {
-    const { title, subject, description, schedule, createdBy } = req.body;
+    const { title, subject, description, schedule, scheduleSlots, createdBy } = req.body;
     const coverFile = req.file;
     if (!coverFile) {
       console.log('Create class: no cover file in request (req.file is undefined)');
@@ -238,11 +270,29 @@ router.post('/', upload.single('cover'), async (req, res) => {
       ? `/class_covers/${coverFile.filename}`
       : null;
 
+    let parsedSlots = [];
+    if (scheduleSlots) {
+      try {
+        const raw = typeof scheduleSlots === 'string' ? JSON.parse(scheduleSlots) : scheduleSlots;
+        parsedSlots = Array.isArray(raw)
+          ? raw
+            .filter((s) => s && (s.day || s.time))
+            .map((s) => ({
+              day: String(s.day || '').trim(),
+              time: String(s.time || '').trim()
+            }))
+          : [];
+      } catch (_) {
+        parsedSlots = [];
+      }
+    }
+
     const newClass = await Class.create({
       title: title.trim(),
       subject: subject ? String(subject).trim() : '',
       description: description ? String(description).trim() : '',
       schedule: schedule ? String(schedule).trim() : '',
+      scheduleSlots: parsedSlots,
       cover: coverPath,
       createdBy: createdBy || null
     });
@@ -256,6 +306,7 @@ router.post('/', upload.single('cover'), async (req, res) => {
         subject: newClass.subject,
         description: newClass.description,
         schedule: newClass.schedule,
+        scheduleSlots: newClass.scheduleSlots,
         cover: newClass.cover,
         createdBy: newClass.createdBy,
         createdAt: newClass.createdAt

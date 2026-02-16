@@ -6,13 +6,13 @@ function StudentList({students, fetchStudents, loading, error}) {
         fetchStudents();
     }, []);
 
+    // Event: delete a labeled image — DELETE /api/students/:filename, then refetch list
     const handleDeleteStudent = async (student) => {
         if (!window.confirm(`Are you sure you want to delete ${student.name.replace(/_/g, ' ')}?`)) {
             return;
         }
 
         try {
-            console.log('Deleting student:', student.name, 'Filename:', student.filename);
             const response = await fetch(`http://localhost:5000/api/students/${student.filename}`, {
                 method: 'DELETE',
             });

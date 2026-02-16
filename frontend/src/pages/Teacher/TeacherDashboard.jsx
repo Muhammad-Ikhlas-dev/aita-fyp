@@ -1,15 +1,54 @@
 // pages/Teacher/TeacherDashboard.jsx
-import React from "react";
+import React, { useState, useEffect } from "react";
 import TeacherCard from "./components/TeacherCard";
 import { Link } from "react-router-dom";
 
+const API_BASE = "http://localhost:5000";
+
+function formatScheduleTime(timeStr) {
+  if (!timeStr || !timeStr.trim()) return "";
+  const [hours, minutes] = timeStr.trim().split(":").map(Number);
+  if (isNaN(hours)) return timeStr;
+  const h = hours % 12 || 12;
+  const ampm = hours < 12 ? "AM" : "PM";
+  const m = minutes != null && !isNaN(minutes) ? String(minutes).padStart(2, "0") : "00";
+  return `${h}:${m} ${ampm}`;
+}
+
 const TeacherDashboard = () => {
-  // placeholder data (replace with API calls)
-  const classes = [
-    { id: 1, name: "Computer Vision", students: 36, nextDue: "Today, 11:59 PM" },
-    { id: 2, name: "Neural Networks", students: 28, nextDue: "Fri, 5:00 PM" },
-    { id: 3, name: "Quantum Computing", students: 19, nextDue: "Mon, 9:00 AM" },
-  ];
+  const [classes, setClasses] = useState([]);
+  const [classesLoading, setClassesLoading] = useState(true);
+  const [classesError, setClassesError] = useState(null);
+
+  // API: GET /api/classes?createdBy= — load teacher's classes for "Your Classes" card on mount
+  useEffect(() => {
+    const fetchClasses = async () => {
+      setClassesLoading(true);
+      setClassesError(null);
+      try {
+        const user = JSON.parse(localStorage.getItem("user") || "{}");
+        const url =
+          user.role === "teacher" && user.id
+            ? `${API_BASE}/api/classes?createdBy=${user.id}`
+            : `${API_BASE}/api/classes`;
+        const res = await fetch(url);
+        const result = await res.json();
+        if (!res.ok) {
+          setClassesError(result.message || "Failed to load classes");
+          setClasses([]);
+          return;
+        }
+        setClasses(result.classes || []);
+      } catch (err) {
+        console.error("Fetch classes error:", err);
+        setClassesError("Network error. Please try again.");
+        setClasses([]);
+      } finally {
+        setClassesLoading(false);
+      }
+    };
+    fetchClasses();
+  }, []);
 
   const recentSubmissions = [
     { id: 1, student: "Sara Khan", assignment: "Edge Detection", time: "2h ago", grade: "Pending" },
@@ -32,27 +71,52 @@ const TeacherDashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <TeacherCard title="Your Classes" subtitle="Active classes & quick actions">
-          <div className="space-y-3">
-            {classes.map((c) => (
-              <div key={c.id} className="flex items-center justify-between p-3 rounded-md bg-[#0b0713] border border-[#1f1830]">
-                <div>
-                  <div className="font-medium">{c.name}</div>
-                  <div className="text-xs text-slate-400">{c.students} students</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm text-sky-300">{c.nextDue}</div>
-                  <div className="mt-2 flex gap-2">
-                    <Link to={`/teacher/dashboard`} className="text-xs px-2 py-1 rounded bg-white/3">View</Link>
-                    <Link to={`/teacher/assignments`} className="text-xs px-2 py-1 rounded border border-slate-700">Assign</Link>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="space-y-3 overflow-y-auto max-h-[280px] pr-1">
+            {classesLoading ? (
+              <p className="text-sm text-slate-400 py-2">Loading classes…</p>
+            ) : classesError ? (
+              <p className="text-sm text-red-400 py-2">{classesError}</p>
+            ) : classes.length === 0 ? (
+              <p className="text-sm text-slate-400 py-2">No classes yet. Create a class to get started.</p>
+            ) : (
+              (() => {
+                const rows = [];
+                classes.forEach((c) => {
+                  const slots = c.scheduleSlots?.length
+                    ? c.scheduleSlots
+                    : [c.scheduleDay != null || c.scheduleTime ? { day: c.scheduleDay || "", time: c.scheduleTime || "" } : null].filter(Boolean);
+                  if (slots.length === 0) {
+                    rows.push({ class: c, slot: null, key: c._id });
+                  } else {
+                    slots.forEach((slot, i) => rows.push({ class: c, slot, key: `${c._id}-${i}` }));
+                  }
+                });
+                return rows.map(({ class: c, slot, key }) => {
+                  const dayTime = slot
+                    ? [slot.day, formatScheduleTime(slot.time)].filter(Boolean).join(", ") || "—"
+                    : "—";
+                  return (
+                    <div key={key} className="flex items-center justify-between p-3 rounded-md bg-[#0b0713] border border-[#1f1830]">
+                      <div>
+                        <div className="font-medium">{c.title}</div>
+                        <div className="text-xs text-slate-400">{c.studentCount ?? 0} students</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-sky-300">{dayTime}</div>
+                        <div className="mt-2 flex gap-2">
+                          <Link to={`/teacher/classes/${c._id}`} className="text-xs px-2 py-1 rounded bg-white/3 hover:bg-white/5">View</Link>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                });
+              })()
+            )}
           </div>
         </TeacherCard>
 
         <TeacherCard title="Assignments Created" subtitle="Recent & drafts">
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 overflow-y-auto max-h-[280px] pr-1">
             <div className="p-3 bg-[#0b0713] rounded-md border border-[#1f1830] flex items-center justify-between">
               <div>
                 <div className="font-medium">Edge Detection Algorithm</div>
@@ -76,7 +140,7 @@ const TeacherDashboard = () => {
         </TeacherCard>
 
         <TeacherCard title="Quizzes & AI Check" subtitle="Upload quizzes and let AI pre-check submissions">
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto max-h-[280px] pr-1">
             <div className="p-3 bg-[#0b0713] rounded-md border border-[#1f1830]">
               <div className="flex items-center justify-between">
                 <div>

@@ -15,10 +15,11 @@ function AttendanceContentArea({ classId, className, subject }) {
     const [pendingFiles, setPendingFiles] = useState([]);
     const [uploadStatus, setUploadStatus] = useState('');
 
-// ** stundentList state and fetch function bcz it was needed in dashboard header as prop and for updating student list without clicking on refresh
-    const [students, setStudents] = useState([]);
+const [students, setStudents] = useState([]);
     const [studentsLoading, setStudentsLoading] = useState(true);
     const [studentsFetchError, setStudentsFetchError] = useState(null);
+
+    // API: GET /api/students (optional ?classId=) — load labeled face images for this class / all
     const fetchStudents = async () => {
         try {
             setStudentsLoading(true);
@@ -45,7 +46,7 @@ function AttendanceContentArea({ classId, className, subject }) {
         fetchStudents();
     }, [classId]);
 
-    // Upload handlers
+    // Event: user selected file(s) — store and show name prompt before upload
     const handleFileChange = (e) => {
         const files = Array.from(e.target.files || []);
         if (files.length === 0) return;
@@ -56,12 +57,12 @@ function AttendanceContentArea({ classId, className, subject }) {
         e.target.value = '';
     };
 
+    // Event: confirm name and upload — POST /api/upload per file (name + optional classId), then refetch students
     const handleNameSubmit = async (name) => {
         setShowNamePrompt(false);
         setUploadStatus('Uploading...');
 
         try {
-            // Upload each file to backend
             for (const file of pendingFiles) {
                 const formData = new FormData();
                 formData.append('image', file);
@@ -93,6 +94,7 @@ function AttendanceContentArea({ classId, className, subject }) {
         }
     };
 
+    // Event: cancel name prompt and clear pending files
     const handleNameCancel = () => {
         setShowNamePrompt(false);
         setPendingFiles([]);

@@ -35,6 +35,7 @@ export default function SignupContainer() {
     resolver: zodResolver(schema(role)),
   });
 
+  // Event: submit signup form — API POST /api/auth/signup; on success redirect to signin
   const onSubmit = async (data) => {
     setSubmitting(true);
     setSubmitError(null);

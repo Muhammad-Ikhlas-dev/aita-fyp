@@ -35,6 +35,7 @@ const TeacherClassDetail = () => {
   const [attendanceFilterDate, setAttendanceFilterDate] = useState("");
   const [attendanceFilterInput, setAttendanceFilterInput] = useState("");
 
+  // API: GET /api/attendance?classId= — load attendance logs for "Show attendance" modal
   const fetchAttendanceRecords = async () => {
     if (!classId) return;
     setAttendanceLoading(true);
@@ -57,6 +58,7 @@ const TeacherClassDetail = () => {
     }
   };
 
+  // API: GET /api/classes/:classId/students — load enrolled students for this class
   const fetchClassStudents = async () => {
     if (!classId) return;
     setStudentsLoading(true);
@@ -76,6 +78,7 @@ const TeacherClassDetail = () => {
     }
   };
 
+  // API: GET /api/classes/:id + class students — load class detail and roster when classId changes
   useEffect(() => {
     const fetchClass = async () => {
       setLoading(true);
@@ -103,10 +106,12 @@ const TeacherClassDetail = () => {
     if (classId) fetchClass();
   }, [classId]);
 
+  // Event: sync add/edit student form fields
   const handleChange = (e) => {
     setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
   };
 
+  // Event: open add-student modal (reset form)
   const openAddModal = () => {
     setEditingId(null);
     setForm({ fullName: "", email: "", rollNo: "" });
@@ -114,6 +119,7 @@ const TeacherClassDetail = () => {
     setModalOpen(true);
   };
 
+  // Event: open edit-student modal with pre-filled form (local-only for now)
   const openEditModal = (student) => {
     setEditingId(student.id);
     setForm({
@@ -124,6 +130,7 @@ const TeacherClassDetail = () => {
     setModalOpen(true);
   };
 
+  // Event: close add/edit student modal
   const closeModal = () => {
     setModalOpen(false);
     setEditingId(null);
@@ -131,6 +138,7 @@ const TeacherClassDetail = () => {
     setAddError(null);
   };
 
+  // Event: add student by email — GET /api/students/lookup then POST /api/classes/:classId/students
   const handleSubmitStudent = async (e) => {
     e.preventDefault();
     if (editingId) {
@@ -151,7 +159,7 @@ const TeacherClassDetail = () => {
         setAddLoading(false);
         return;
       }
-      const res = await fetch(
+      const res = await fetch( // API: lookup student by email
         `${API_BASE}/api/students/lookup?email=${encodeURIComponent(email)}`
       );
       const result = await res.json();
@@ -161,7 +169,7 @@ const TeacherClassDetail = () => {
         return;
       }
       const student = result.student;
-      const enrollRes = await fetch(
+      const enrollRes = await fetch( // API: add student to class
         `${API_BASE}/api/classes/${classId}/students`,
         {
           method: "POST",
@@ -193,6 +201,7 @@ const TeacherClassDetail = () => {
     }
   };
 
+  // Event: remove student from class — DELETE /api/classes/:classId/students/:studentId
   const handleDeleteStudent = async (id) => {
     try {
       const res = await fetch(

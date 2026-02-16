@@ -9,6 +9,7 @@ const TeacherClasses = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // API: GET /api/classes (with createdBy for teacher) — load list of classes for My Classes page
   const fetchClasses = async () => {
     setLoading(true);
     setError(null);
@@ -39,9 +40,20 @@ const TeacherClasses = () => {
     fetchClasses();
   }, []);
 
-  const handleDelete = (id) => {
-    setClasses((prev) => prev.filter((cls) => cls._id !== id));
-    // TODO: call DELETE /api/classes/:id when backend supports it
+  // Event: delete class — call DELETE /api/classes/:id then remove from local state
+  const handleDelete = async (id) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/classes/${id}`, { method: "DELETE" });
+      const result = await res.json();
+      if (!res.ok) {
+        alert(result.message || "Failed to delete class");
+        return;
+      }
+      setClasses((prev) => prev.filter((cls) => cls._id !== id));
+    } catch (err) {
+      console.error("Delete class error:", err);
+      alert("Network error. Please try again.");
+    }
   };
 
   const formatDate = (dateStr) => {

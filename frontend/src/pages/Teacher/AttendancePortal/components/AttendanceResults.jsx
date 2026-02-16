@@ -24,6 +24,7 @@ function AttendanceResults({ results, capturedImage, onClose, onSave }) {
         }
     }, [students, results]);
 
+    // API: GET /api/students — load labeled students for attendance review (present/absent)
     const fetchStudents = async () => {
         try {
             const response = await fetch('http://localhost:5000/api/students');
@@ -36,6 +37,8 @@ function AttendanceResults({ results, capturedImage, onClose, onSave }) {
         }
     };
 
+    // Event: toggle a student's status between present and absent
+    // Event: toggle a student's status between present and absent
     const toggleAttendance = (studentName) => {
         setAttendance(prev => ({
             ...prev,
@@ -46,6 +49,7 @@ function AttendanceResults({ results, capturedImage, onClose, onSave }) {
         }));
     };
 
+    // Event: confirm and pass present students to parent (which then calls POST /api/attendance/mark)
     const handleSave = () => {
         const presentStudents = Object.entries(attendance)
             .filter(([_, data]) => data.status === 'present')

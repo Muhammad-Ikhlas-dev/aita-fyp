@@ -1,5 +1,8 @@
 // pages/Teacher/CreateClass.jsx
 import React, { useState, useRef } from "react";
+import { Plus, Trash2 } from "lucide-react";
+
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const CreateClass = () => {
   const [form, setForm] = useState({
@@ -8,14 +11,32 @@ const CreateClass = () => {
     description: "",
     schedule: "",
   });
+  const [scheduleSlots, setScheduleSlots] = useState([{ day: "", time: "" }]);
 
   const coverInputRef = useRef(null);
 
+  // Event: sync form fields (title, subject, description, schedule)
   const handleChange = (e) => setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
+
+  // Event: update a single schedule slot's day or time
+  const updateSlot = (index, field, value) => {
+    setScheduleSlots((prev) =>
+      prev.map((slot, i) => (i === index ? { ...slot, [field]: value } : slot))
+    );
+  };
+
+  // Event: add another day/time slot
+  const addSlot = () => setScheduleSlots((prev) => [...prev, { day: "", time: "" }]);
+
+  // Event: remove a schedule slot (keep at least one)
+  const removeSlot = (index) => {
+    setScheduleSlots((prev) => (prev.length <= 1 ? [{ day: "", time: "" }] : prev.filter((_, i) => i !== index)));
+  };
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
+  // Event: submit create-class form — POST /api/classes with FormData (title, subject, description, scheduleSlots, cover, createdBy)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -27,6 +48,7 @@ const CreateClass = () => {
       formData.append("subject", form.subject);
       formData.append("description", form.description);
       formData.append("schedule", form.schedule);
+      formData.append("scheduleSlots", JSON.stringify(scheduleSlots.filter((s) => s.day || s.time)));
       if (user.role === "teacher" && user.id) {
         formData.append("createdBy", user.id);
       }
@@ -34,6 +56,8 @@ const CreateClass = () => {
       if (coverFile) {
         formData.append("cover", coverFile);
       }
+      // API: POST /api/classes — create class with optional cover and schedule slots
+      // API: POST /api/classes — create class with optional cover and schedule slots
       const res = await fetch("http://localhost:5000/api/classes", {
         method: "POST",
         body: formData,
@@ -44,6 +68,7 @@ const CreateClass = () => {
         return;
       }
       setForm({ title: "", subject: "", description: "", schedule: "" });
+      setScheduleSlots([{ day: "", time: "" }]);
       if (coverInputRef.current) coverInputRef.current.value = "";
       alert(result.message || "Class created successfully.");
     } catch (err) {
@@ -86,6 +111,56 @@ const CreateClass = () => {
             accept="image/*"
             className="w-full mt-2 text-sm text-slate-300"
           />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm text-slate-300">Schedule (day & time) — add multiple if class runs on several days/times</label>
+            <button
+              type="button"
+              onClick={addSlot}
+              className="inline-flex items-center gap-1 text-sm text-cyan-400 hover:text-cyan-300"
+            >
+              <Plus size={16} />
+              Add slot
+            </button>
+          </div>
+          <div className="space-y-3">
+            {scheduleSlots.map((slot, index) => (
+              <div key={index} className="flex flex-wrap items-end gap-3 p-3 rounded-lg bg-[#0b0713] border border-[#1f1830]">
+                <div className="flex-1 min-w-[120px]">
+                  <span className="text-xs text-slate-500">Day</span>
+                  <select
+                    value={slot.day}
+                    onChange={(e) => updateSlot(index, "day", e.target.value)}
+                    className="w-full mt-1 p-2 rounded-lg bg-[#0b0713] border border-[#1f1830] text-slate-200 text-sm"
+                  >
+                    <option value="">Select day</option>
+                    {DAYS.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1 min-w-[100px]">
+                  <span className="text-xs text-slate-500">Time</span>
+                  <input
+                    type="time"
+                    value={slot.time}
+                    onChange={(e) => updateSlot(index, "time", e.target.value)}
+                    className="w-full mt-1 p-2 rounded-lg bg-[#0b0713] border border-[#1f1830] text-slate-200 text-sm"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeSlot(index)}
+                  className="p-2 text-slate-400 hover:text-red-400 rounded"
+                  title="Remove slot"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="flex gap-3">

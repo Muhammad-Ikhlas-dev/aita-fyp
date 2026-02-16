@@ -8,7 +8,7 @@ const LabeledImage = require('../schemas/LabeledImage');
 const router = express.Router();
 const uploadDir = path.join(__dirname, '..', 'labeled_images');
 
-// Lookup student by email (for adding to class) - must be before /:filename
+// GET /api/students/lookup?email= — find a student by email (for adding to class)
 router.get('/lookup', async (req, res) => {
   try {
     const email = (req.query.email || '').trim().toLowerCase();
@@ -45,6 +45,7 @@ router.get('/lookup', async (req, res) => {
   }
 });
 
+// GET /api/students — list labeled face images (optionally filtered by classId) for recognition/UI
 router.get('/', async (req, res) => {
   try {
     const { classId } = req.query;
@@ -73,6 +74,7 @@ router.get('/', async (req, res) => {
   }
 });
 
+// DELETE /api/students/:filename — remove a labeled image (file + LabeledImage doc)
 router.delete('/:filename', async (req, res) => {
   try {
     const { filename } = req.params;

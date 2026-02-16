@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 
 const router = express.Router();
 
+// GET /api/attendance — list attendance logs, optionally filtered by classId query
 router.get('/', async (req, res) => {
   try {
     const { classId } = req.query;
@@ -28,6 +29,8 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST /api/attendance/mark — create an attendance log (students array, optional timestamp and classId)
+// POST /api/attendance/mark — create an attendance log (students array, optional timestamp and classId)
 router.post('/mark', async (req, res) => {
   try {
     const { students, timestamp, classId } = req.body;

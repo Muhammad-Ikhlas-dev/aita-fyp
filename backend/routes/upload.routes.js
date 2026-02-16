@@ -32,6 +32,7 @@ const upload = multer({
   }
 });
 
+// POST /api/upload — upload a face image; query name (label) and optional classId; saves file + LabeledImage doc
 router.post('/', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {

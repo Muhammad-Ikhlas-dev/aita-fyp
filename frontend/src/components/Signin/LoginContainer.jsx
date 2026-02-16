@@ -33,6 +33,7 @@ export default function LoginContainer() {
     resolver: zodResolver(schema),
   });
 
+  // Event: submit login form — API POST /api/auth/login; on success store user and redirect by role
   const onSubmit = async (data) => {
     setSubmitting(true);
     setError(null);

@@ -5,6 +5,7 @@ const Student = require('../schemas/Student');
 
 const router = express.Router();
 
+// POST /api/auth/signup — register a new teacher or student (role + optional rollNo for student)
 router.post('/signup', async (req, res) => {
   try {
     const { fullName, email, password, role, rollNo } = req.body;
@@ -100,6 +101,8 @@ router.post('/signup', async (req, res) => {
   }
 });
 
+// POST /api/auth/login — authenticate by email/password; returns user (teacher or student) without password
+// POST /api/auth/login — authenticate by email/password; returns user (teacher or student) without password
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
