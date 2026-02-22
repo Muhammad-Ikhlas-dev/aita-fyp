@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import LoginForm from "./LoginForm";
 
@@ -26,6 +26,8 @@ const API_BASE = "http://localhost:5000/api";
 
 export default function LoginContainer() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -49,6 +51,10 @@ export default function LoginContainer() {
         return;
       }
       localStorage.setItem("user", JSON.stringify(result.user));
+      if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+        navigate(redirectTo, { replace: true });
+        return;
+      }
       if (result.user.role === "teacher") {
         navigate("/teacher/dashboard");
       } else {

@@ -9,7 +9,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 const navItems = [
   { title: "Dashboard", to: "/teacher/dashboard", icon: <Home size={18} /> },
   { title: "My Classes", to: "/teacher/classes", icon: <BookOpen size={18} /> },
@@ -21,6 +21,13 @@ const navItems = [
 
 const TeacherSidebar = ({ onClose, mobile = false }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    if (mobile && onClose) onClose();
+    navigate("/", { replace: true });
+  };
 
   return (
     <aside
@@ -70,14 +77,14 @@ const TeacherSidebar = ({ onClose, mobile = false }) => {
 
       {/* Logout */}
       <div className="mt-auto pt-4 border-t border-[#1f1830]">
-        <Link to="/">
-        <button className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-white/5">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 text-left"
+        >
           <LogOut size={18} />
-          <span className="text-sm text-slate-300">
-            Logout
-          </span>
+          <span className="text-sm text-slate-300">Logout</span>
         </button>
-        </Link>
       </div>
     </aside>
   );

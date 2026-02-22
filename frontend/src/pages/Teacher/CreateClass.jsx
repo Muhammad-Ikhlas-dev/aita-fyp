@@ -1,6 +1,6 @@
 // pages/Teacher/CreateClass.jsx
 import React, { useState, useRef } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Link2, Copy, Check } from "lucide-react";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -35,6 +35,7 @@ const CreateClass = () => {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [createdJoinLink, setCreatedJoinLink] = useState(null);
 
   // Event: submit create-class form — POST /api/classes with FormData (title, subject, description, scheduleSlots, cover, createdBy)
   const handleSubmit = async (e) => {
@@ -70,6 +71,11 @@ const CreateClass = () => {
       setForm({ title: "", subject: "", description: "", schedule: "" });
       setScheduleSlots([{ day: "", time: "" }]);
       if (coverInputRef.current) coverInputRef.current.value = "";
+      const joinCode = result.class?.joinCode;
+      if (joinCode) {
+        const base = window.location.origin;
+        setCreatedJoinLink(`${base}/join/${joinCode}`);
+      }
       alert(result.message || "Class created successfully.");
     } catch (err) {
       console.error("Create class error:", err);
@@ -79,9 +85,41 @@ const CreateClass = () => {
     }
   };
 
+  const [copied, setCopied] = useState(false);
+  const copyJoinLink = () => {
+    if (!createdJoinLink) return;
+    navigator.clipboard.writeText(createdJoinLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   return (
     <div className="max-w-3xl">
       <h2 className="text-2xl font-semibold mb-4">Create New Class</h2>
+
+      {createdJoinLink && (
+        <div className="mb-4 p-4 rounded-lg bg-[#0b0713] border border-[#1f1830]">
+          <p className="text-sm text-slate-300 mb-2 flex items-center gap-2">
+            <Link2 size={16} /> Share this link so students can join:
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={createdJoinLink}
+              className="flex-1 p-2 rounded bg-black/30 border border-slate-700 text-slate-200 text-sm"
+            />
+            <button
+              type="button"
+              onClick={copyJoinLink}
+              className="p-2 rounded-lg border border-slate-600 hover:border-slate-500 flex items-center gap-1 text-sm"
+            >
+              {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <p className="mb-4 text-sm text-red-400 bg-red-900/20 px-3 py-2 rounded-lg">{error}</p>

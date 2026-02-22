@@ -36,6 +36,13 @@ const classSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Teacher',
     default: null
+  },
+  joinCode: {
+    type: String,
+    trim: true,
+    unique: true,
+    sparse: true,
+    default: null
   }
 }, {
   timestamps: true,

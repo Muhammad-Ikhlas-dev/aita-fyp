@@ -64,8 +64,15 @@ const Sidebar = ({ onClose }) => {
         <NavItem icon={<Settings size={20} />} label="Settings" to="/student/settings" />
 
         {/* Logout Button */}
-        <button onClick={() => navigate("/")}>
-          <NavItem icon={<LogOut size={20} />} label="Logout" to="#" />
+        <button
+          onClick={() => {
+            localStorage.removeItem("user");
+            navigate("/", { replace: true });
+          }}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-400 hover:bg-white/5 hover:text-white"
+        >
+          <LogOut size={20} />
+          <span className="font-medium text-sm">Logout</span>
         </button>
       </div>
     </aside>

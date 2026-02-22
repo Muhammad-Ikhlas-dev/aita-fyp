@@ -9,6 +9,21 @@ const Student = require('../schemas/Student');
 const router = express.Router();
 const classCoversDir = path.join(__dirname, '..', 'class_covers');
 
+const ALPHANUM = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function randomCode(len = 8) {
+  let s = '';
+  for (let i = 0; i < len; i++) s += ALPHANUM[Math.floor(Math.random() * ALPHANUM.length)];
+  return s;
+}
+async function generateUniqueJoinCode() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const code = randomCode(8);
+    const exists = await Class.findOne({ joinCode: code }).lean();
+    if (!exists) return code;
+  }
+  return randomCode(8) + Date.now().toString(36).slice(-4);
+}
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, classCoversDir);
@@ -72,20 +87,56 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/classes/:id — fetch a single class by id
+// GET /api/classes/join/:code — resolve join code to class (no auth); must be before GET /:id
+router.get('/join/:code', async (req, res) => {
+  try {
+    const code = (req.params.code || '').trim().toUpperCase();
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Join code is required' });
+    }
+    const classDoc = await Class.findOne({ joinCode: code }).select('_id title joinCode').lean();
+    if (!classDoc) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired join code'
+      });
+    }
+    res.json({
+      success: true,
+      class: {
+        classId: classDoc._id.toString(),
+        title: classDoc.title,
+        joinCode: classDoc.joinCode
+      }
+    });
+  } catch (error) {
+    console.error('Get class by join code error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error resolving join code',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/classes/:id — fetch a single class by id (ensure joinCode for legacy classes)
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const classDoc = await Class.findById(id).lean();
+    let classDoc = await Class.findById(id);
     if (!classDoc) {
       return res.status(404).json({
         success: false,
         message: 'Class not found'
       });
     }
+    if (!classDoc.joinCode) {
+      classDoc.joinCode = await generateUniqueJoinCode();
+      await classDoc.save();
+    }
     res.json({
       success: true,
-      class: classDoc
+      class: classDoc.toObject ? classDoc.toObject() : classDoc
     });
   } catch (error) {
     console.error('Get class error:', error);
@@ -287,6 +338,7 @@ router.post('/', upload.single('cover'), async (req, res) => {
       }
     }
 
+    const joinCode = await generateUniqueJoinCode();
     const newClass = await Class.create({
       title: title.trim(),
       subject: subject ? String(subject).trim() : '',
@@ -294,7 +346,8 @@ router.post('/', upload.single('cover'), async (req, res) => {
       schedule: schedule ? String(schedule).trim() : '',
       scheduleSlots: parsedSlots,
       cover: coverPath,
-      createdBy: createdBy || null
+      createdBy: createdBy || null,
+      joinCode
     });
 
     res.status(201).json({
@@ -309,6 +362,7 @@ router.post('/', upload.single('cover'), async (req, res) => {
         scheduleSlots: newClass.scheduleSlots,
         cover: newClass.cover,
         createdBy: newClass.createdBy,
+        joinCode: newClass.joinCode,
         createdAt: newClass.createdAt
       }
     });

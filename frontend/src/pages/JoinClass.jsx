@@ -1,0 +1,150 @@
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+
+const API_BASE = "http://localhost:5000/api";
+
+export default function JoinClass() {
+  const { code } = useParams();
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  const [classInfo, setClassInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const raw = localStorage.getItem("user");
+    const u = raw ? JSON.parse(raw) : null;
+    setUser(u);
+
+    if (!u) {
+      setLoading(false);
+      return;
+    }
+
+    if (u.role !== "student") {
+      setLoading(false);
+      return;
+    }
+
+    if (!code || !code.trim()) {
+      setError("Invalid join link.");
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/classes/join/${encodeURIComponent(code.trim())}`);
+        const result = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          setError(result.message || "Invalid or expired join code.");
+          setLoading(false);
+          return;
+        }
+        setClassInfo(result.class);
+      } catch (err) {
+        if (!cancelled) {
+          setError("Network error. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [code]);
+
+  // Not logged in → redirect to signin with return URL
+  useEffect(() => {
+    if (loading || user) return;
+    const redirect = `/join/${code || ""}`;
+    navigate(`/signin?redirect=${encodeURIComponent(redirect)}`, { replace: true });
+  }, [loading, user, navigate, code]);
+
+  const handleJoin = async () => {
+    if (!classInfo?.classId || !user?.id) return;
+    setJoining(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/classes/${classInfo.classId}/students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: user.id }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        if (res.status === 409) {
+          setError("You are already in this class.");
+          return;
+        }
+        setError(result.message || "Could not join class.");
+        return;
+      }
+      navigate("/student/dashboard", { replace: true });
+    } catch (err) {
+      console.error("Join class error:", err);
+      setError("Network error. Please try again.");
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#0a001a] via-[#1a0033] to-[#0f0020] flex items-center justify-center text-white">
+        <p>Loading…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  if (user.role !== "student") {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#0a001a] via-[#1a0033] to-[#0f0020] flex items-center justify-center text-white p-4">
+        <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8 max-w-md text-center">
+          <p className="text-slate-300 mb-4">Only students can join a class with this link.</p>
+          <Link to="/" className="text-[#9B37FF] hover:underline">Go to home</Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!classInfo) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#0a001a] via-[#1a0033] to-[#0f0020] flex items-center justify-center text-white p-4">
+        <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8 max-w-md text-center">
+          <p className="text-red-400 mb-4">{error || "Invalid or expired join code."}</p>
+          <Link to="/student/dashboard" className="text-[#9B37FF] hover:underline">Go to dashboard</Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#0a001a] via-[#1a0033] to-[#0f0020] flex items-center justify-center text-white p-4">
+      <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8 max-w-md w-full">
+        <h1 className="text-2xl font-semibold mb-2">Join class</h1>
+        <p className="text-slate-300 mb-6">You’re about to join: <strong className="text-white">{classInfo.title}</strong></p>
+        {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={handleJoin}
+            disabled={joining}
+            className="px-4 py-2 rounded-lg bg-[#9B37FF] hover:bg-[#8a2ee6] disabled:opacity-50"
+          >
+            {joining ? "Joining…" : "Join class"}
+          </button>
+          <Link to="/student/dashboard" className="px-4 py-2 rounded-lg border border-white/20 hover:border-white/40">
+            Cancel
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}

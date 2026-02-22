@@ -2,48 +2,10 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const mongoose = require('mongoose');
-const Student = require('../schemas/Student');
 const LabeledImage = require('../schemas/LabeledImage');
 
 const router = express.Router();
 const uploadDir = path.join(__dirname, '..', 'labeled_images');
-
-// GET /api/students/lookup?email= — find a student by email (for adding to class)
-router.get('/lookup', async (req, res) => {
-  try {
-    const email = (req.query.email || '').trim().toLowerCase();
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email is required'
-      });
-    }
-    const student = await Student.findOne({ email }).select('fullName email rollNo').lean();
-    if (!student) {
-      return res.status(404).json({
-        success: false,
-        message: "Student isn't on the platform so can't add the student."
-      });
-    }
-    res.json({
-      success: true,
-      student: {
-        id: student._id.toString(),
-        _id: student._id,
-        fullName: student.fullName,
-        email: student.email,
-        rollNo: student.rollNo || ''
-      }
-    });
-  } catch (error) {
-    console.error('Student lookup error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error looking up student',
-      error: error.message
-    });
-  }
-});
 
 // GET /api/students — list labeled face images (optionally filtered by classId) for recognition/UI
 router.get('/', async (req, res) => {

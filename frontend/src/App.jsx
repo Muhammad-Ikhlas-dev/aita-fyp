@@ -27,12 +27,12 @@ const UploadQuiz = lazy(() => import("./pages/Teacher/UploadQuiz"));
 const TeacherSetting = lazy(() => import("./pages/Teacher/TeacherSetting"));
 const TeacherClasses = lazy(() => import("./pages/Teacher/TeacherClasses"));
 const TeacherClassDetail = lazy(() => import("./pages/Teacher/TeacherClassDetail"));
-
+const JoinClass = lazy(() => import("./pages/JoinClass"));
 
 function App() {
   const location = useLocation();
-  // hide main Navbar for student/teacher dashboards
-  const hideNavbar = location.pathname.startsWith("/student") || location.pathname.startsWith("/teacher");
+  // hide main Navbar for student/teacher dashboards and join page
+  const hideNavbar = location.pathname.startsWith("/student") || location.pathname.startsWith("/teacher") || location.pathname.startsWith("/join");
 
   return (
     <Suspense fallback={<ShimmerLoader />}>
@@ -44,6 +44,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/signin" element={<Signin />} />
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/join/:code" element={<JoinClass />} />
 
         {/* Student Routes */}
         <Route path="/student" element={<StudentLayout />}>

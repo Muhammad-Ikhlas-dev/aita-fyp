@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, UserPlus, Pencil, Trash2, X, ClipboardCheck, ClipboardList, Calendar } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, X, ClipboardCheck, ClipboardList, Calendar, FileText, Users, HelpCircle, Download, Link2, Copy, Check } from "lucide-react";
 
 const API_BASE = "http://localhost:5000";
 
@@ -13,6 +13,16 @@ function formatDateDMY(date) {
   return `${day}/${month}/${year}, ${time}`;
 }
 
+function toDateTimeLocal(date) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day}T${h}:${min}`;
+}
+
 const TeacherClassDetail = () => {
   const { classId } = useParams();
   const navigate = useNavigate();
@@ -22,11 +32,6 @@ const TeacherClassDetail = () => {
 
   const [students, setStudents] = useState([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ fullName: "", email: "", rollNo: "" });
-  const [addError, setAddError] = useState(null);
-  const [addLoading, setAddLoading] = useState(false);
 
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
@@ -34,6 +39,16 @@ const TeacherClassDetail = () => {
   const [attendanceError, setAttendanceError] = useState(null);
   const [attendanceFilterDate, setAttendanceFilterDate] = useState("");
   const [attendanceFilterInput, setAttendanceFilterInput] = useState("");
+
+  const [assignments, setAssignments] = useState([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [editingAssignmentId, setEditingAssignmentId] = useState(null);
+  const [editDeadline, setEditDeadline] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [deleteLoadingId, setDeleteLoadingId] = useState(null);
+
+  const [activeTab, setActiveTab] = useState("students"); // "students" | "assignments" | "quizzes"
+  const [joinLinkCopied, setJoinLinkCopied] = useState(false);
 
   // API: GET /api/attendance?classId= — load attendance logs for "Show attendance" modal
   const fetchAttendanceRecords = async () => {
@@ -78,7 +93,91 @@ const TeacherClassDetail = () => {
     }
   };
 
-  // API: GET /api/classes/:id + class students — load class detail and roster when classId changes
+  const openEditAssignment = (a) => {
+    setEditingAssignmentId(a._id);
+    setEditDeadline(toDateTimeLocal(a.deadline || new Date()));
+  };
+
+  const closeEditAssignment = () => {
+    setEditingAssignmentId(null);
+    setEditDeadline("");
+  };
+
+  const saveEditDeadline = async (e) => {
+    e.preventDefault();
+    if (!editingAssignmentId || !editDeadline) return;
+    setEditLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/assignments/${editingAssignmentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deadline: editDeadline }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || "Failed to update deadline");
+        setEditLoading(false);
+        return;
+      }
+      setAssignments((prev) =>
+        prev.map((x) =>
+          x._id === editingAssignmentId ? { ...x, deadline: data.assignment.deadline } : x
+        )
+      );
+      closeEditAssignment();
+    } catch (err) {
+      console.error("Update assignment error:", err);
+      alert("Network error. Please try again.");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const deleteAssignment = async (a) => {
+    if (!window.confirm(`Delete assignment "${a.title}"? This cannot be undone.`)) return;
+    setDeleteLoadingId(a._id);
+    try {
+      const res = await fetch(`${API_BASE}/api/assignments/${a._id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || "Failed to delete assignment");
+        setDeleteLoadingId(null);
+        return;
+      }
+      setAssignments((prev) => prev.filter((x) => x._id !== a._id));
+    } catch (err) {
+      console.error("Delete assignment error:", err);
+      alert("Network error. Please try again.");
+    } finally {
+      setDeleteLoadingId(null);
+    }
+  };
+
+  // API: GET /api/assignments?classId= & createdBy= — load teacher's assignments for this class
+  const fetchAssignments = async () => {
+    if (!classId) return;
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    if (user.role !== "teacher" || !user.id) return;
+    setAssignmentsLoading(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/assignments?classId=${encodeURIComponent(classId)}&createdBy=${encodeURIComponent(user.id)}`
+      );
+      const result = await res.json();
+      if (!res.ok) {
+        setAssignments([]);
+        return;
+      }
+      setAssignments(result.assignments || []);
+    } catch (err) {
+      console.error("Fetch assignments error:", err);
+      setAssignments([]);
+    } finally {
+      setAssignmentsLoading(false);
+    }
+  };
+
+  // API: GET /api/classes/:id + class students + assignments — load class detail and roster when classId changes
   useEffect(() => {
     const fetchClass = async () => {
       setLoading(true);
@@ -94,6 +193,7 @@ const TeacherClassDetail = () => {
         }
         setClassDetail(result.class);
         await fetchClassStudents();
+        await fetchAssignments();
       } catch (err) {
         console.error("Fetch class error:", err);
         setError("Network error. Please try again.");
@@ -105,101 +205,6 @@ const TeacherClassDetail = () => {
     };
     if (classId) fetchClass();
   }, [classId]);
-
-  // Event: sync add/edit student form fields
-  const handleChange = (e) => {
-    setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
-  };
-
-  // Event: open add-student modal (reset form)
-  const openAddModal = () => {
-    setEditingId(null);
-    setForm({ fullName: "", email: "", rollNo: "" });
-    setAddError(null);
-    setModalOpen(true);
-  };
-
-  // Event: open edit-student modal with pre-filled form (local-only for now)
-  const openEditModal = (student) => {
-    setEditingId(student.id);
-    setForm({
-      fullName: student.fullName,
-      email: student.email,
-      rollNo: student.rollNo,
-    });
-    setModalOpen(true);
-  };
-
-  // Event: close add/edit student modal
-  const closeModal = () => {
-    setModalOpen(false);
-    setEditingId(null);
-    setForm({ fullName: "", email: "", rollNo: "" });
-    setAddError(null);
-  };
-
-  // Event: add student by email — GET /api/students/lookup then POST /api/classes/:classId/students
-  const handleSubmitStudent = async (e) => {
-    e.preventDefault();
-    if (editingId) {
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.id === editingId ? { ...s, ...form } : s
-        )
-      );
-      closeModal();
-      return;
-    }
-    setAddLoading(true);
-    setAddError(null);
-    try {
-      const email = form.email.trim();
-      if (!email) {
-        setAddError("Email is required.");
-        setAddLoading(false);
-        return;
-      }
-      const res = await fetch( // API: lookup student by email
-        `${API_BASE}/api/students/lookup?email=${encodeURIComponent(email)}`
-      );
-      const result = await res.json();
-      if (!res.ok) {
-        setAddError(result.message || "Could not find student.");
-        setAddLoading(false);
-        return;
-      }
-      const student = result.student;
-      const enrollRes = await fetch( // API: add student to class
-        `${API_BASE}/api/classes/${classId}/students`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ studentId: student.id || student._id }),
-        }
-      );
-      const enrollResult = await enrollRes.json();
-      if (!enrollRes.ok) {
-        setAddError(enrollResult.message || "Could not add student to class.");
-        setAddLoading(false);
-        return;
-      }
-      setStudents((prev) => [
-        ...prev,
-        {
-          id: enrollResult.student.id || enrollResult.student._id,
-          fullName: enrollResult.student.fullName,
-          email: enrollResult.student.email,
-          rollNo: enrollResult.student.rollNo ?? "",
-        },
-      ]);
-      closeModal();
-    } catch (err) {
-      console.error("Lookup student error:", err);
-      setAddError("Network error. Please try again.");
-    } finally {
-      setAddLoading(false);
-    }
-  };
 
   // Event: remove student from class — DELETE /api/classes/:classId/students/:studentId
   const handleDeleteStudent = async (id) => {
@@ -308,164 +313,253 @@ const TeacherClassDetail = () => {
               Show attendance
             </button>
           </div>
+          {classDetail.joinCode && (
+            <div className="mt-4 pt-4 border-t border-[#1f1830]">
+              <p className="text-sm text-slate-400 mb-2 flex items-center gap-2">
+                <Link2 size={16} /> Student join link (share so students can join this class)
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={`${window.location.origin}/join/${classDetail.joinCode}`}
+                  className="flex-1 max-w-md p-2 rounded bg-black/30 border border-slate-700 text-slate-200 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/join/${classDetail.joinCode}`;
+                    navigator.clipboard.writeText(url).then(() => {
+                      setJoinLinkCopied(true);
+                      setTimeout(() => setJoinLinkCopied(false), 2000);
+                    });
+                  }}
+                  className="p-2 rounded-lg border border-slate-600 hover:border-slate-500 flex items-center gap-1 text-sm text-slate-300"
+                >
+                  {joinLinkCopied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+                  {joinLinkCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Students section */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-white">Students</h2>
+      {/* Tab navigation */}
+      <div className="flex border-b border-[#1f1830] mb-6 gap-1">
         <button
-          onClick={openAddModal}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm"
+          type="button"
+          onClick={() => setActiveTab("students")}
+          className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-t-lg transition ${
+            activeTab === "students"
+              ? "bg-[#1f1830] text-cyan-400 border border-[#1f1830] border-b-0 -mb-px"
+              : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+          }`}
         >
-          <UserPlus size={18} />
-          Add student
+          <Users size={18} />
+          Students
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("assignments")}
+          className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-t-lg transition ${
+            activeTab === "assignments"
+              ? "bg-[#1f1830] text-cyan-400 border border-[#1f1830] border-b-0 -mb-px"
+              : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+          }`}
+        >
+          <FileText size={18} />
+          Assignments
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("quizzes")}
+          className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-t-lg transition ${
+            activeTab === "quizzes"
+              ? "bg-[#1f1830] text-cyan-400 border border-[#1f1830] border-b-0 -mb-px"
+              : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+          }`}
+        >
+          <HelpCircle size={18} />
+          Quizzes
         </button>
       </div>
 
-      <div className="border border-[#1f1830] rounded-xl overflow-hidden">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-[#1f1830] text-slate-400 text-sm">
-              <th className="p-3 font-medium">Name</th>
-              <th className="p-3 font-medium">Email</th>
-              <th className="p-3 font-medium">Roll No</th>
-              <th className="p-3 font-medium text-right w-24">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {studentsLoading ? (
-              <tr>
-                <td colSpan={4} className="p-6 text-center text-slate-400 text-sm">
-                  Loading students…
-                </td>
-              </tr>
-            ) : students.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="p-6 text-center text-slate-500 text-sm">
-                  No students added yet. Click &quot;Add student&quot; to add one.
-                </td>
-              </tr>
-            ) : (
-              students.map((s) => (
-                <tr
-                  key={s.id}
-                  className="border-t border-[#1f1830] hover:bg-white/5 transition"
+      {/* Tab content: Students */}
+      {activeTab === "students" && (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-white">Students</h2>
+          </div>
+          <div className="border border-[#1f1830] rounded-xl overflow-hidden">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-[#1f1830] text-slate-400 text-sm">
+                  <th className="p-3 font-medium">Name</th>
+                  <th className="p-3 font-medium">Email</th>
+                  <th className="p-3 font-medium">Roll No</th>
+                  <th className="p-3 font-medium text-right w-24">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {studentsLoading ? (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center text-slate-400 text-sm">
+                      Loading students…
+                    </td>
+                  </tr>
+                ) : students.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center text-slate-500 text-sm">
+                      No students in this class yet. Share the join link above so students can join.
+                    </td>
+                  </tr>
+                ) : (
+                  students.map((s) => (
+                    <tr
+                      key={s.id}
+                      className="border-t border-[#1f1830] hover:bg-white/5 transition"
+                    >
+                      <td className="p-3 text-slate-200">{s.fullName}</td>
+                      <td className="p-3 text-slate-300 text-sm">{s.email}</td>
+                      <td className="p-3 text-slate-300 text-sm">{s.rollNo}</td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => handleDeleteStudent(s.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-400 rounded"
+                          title="Remove from class"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Tab content: Assignments */}
+      {activeTab === "assignments" && (
+        <div>
+          <h2 className="text-xl font-semibold text-white mb-4">Assignments</h2>
+          {assignmentsLoading ? (
+            <p className="text-slate-400 text-sm py-4">Loading assignments…</p>
+          ) : assignments.length === 0 ? (
+            <p className="text-slate-500 text-sm py-4">No assignments published to this class yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {assignments.map((a) => (
+                <div
+                  key={a._id}
+                  className="flex gap-4 p-4 rounded-xl bg-[#0b0713] border border-[#1f1830]"
                 >
-                  <td className="p-3 text-slate-200">{s.fullName}</td>
-                  <td className="p-3 text-slate-300 text-sm">{s.email}</td>
-                  <td className="p-3 text-slate-300 text-sm">{s.rollNo}</td>
-                  <td className="p-3 text-right">
+                  {/* Preview / Download: same file teacher uploaded (pdf, docx, txt) */}
+                  {a.attachmentPath || a.attachmentOriginalName ? (
+                    <a
+                      href={`${API_BASE}/api/assignments/${a._id}/download`}
+                      download={a.attachmentOriginalName || undefined}
+                      className="w-28 h-28 shrink-0 rounded-lg bg-[#1f1830] border border-[#2a2340] flex flex-col items-center justify-center text-slate-400 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-500/10 transition overflow-hidden"
+                      title={`Download ${a.attachmentOriginalName || "assignment"}`}
+                    >
+                      <Download size={28} className="mb-1" />
+                      <span className="text-[10px] px-1 text-center truncate w-full">
+                        {a.attachmentOriginalName ? a.attachmentOriginalName.replace(/\.[^/.]+$/, "") : "Download"}
+                      </span>
+                    </a>
+                  ) : (
+                    <div className="w-28 h-28 shrink-0 rounded-lg bg-[#1f1830] border border-[#2a2340] flex flex-col items-center justify-center text-slate-500 overflow-hidden">
+                      <FileText size={32} className="text-cyan-500/70 mb-1" />
+                      <span className="text-[10px] px-1 text-center truncate w-full">No file</span>
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 flex flex-col justify-center">
+                    <h3 className="font-medium text-white truncate">{a.title}</h3>
+                    <p className="text-slate-400 text-sm mt-1 flex items-center gap-1.5">
+                      <Calendar size={14} className="shrink-0 text-cyan-400" />
+                      Due: {a.deadline ? formatDateDMY(a.deadline) : "—"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 self-center">
                     <button
-                      onClick={() => openEditModal(s)}
-                      className="p-1.5 text-slate-400 hover:text-cyan-400 rounded"
-                      title="Edit"
+                      type="button"
+                      onClick={() => openEditAssignment(a)}
+                      className="p-2 text-slate-400 hover:text-cyan-400 rounded-lg hover:bg-white/5 transition"
+                      title="Edit deadline"
                     >
                       <Pencil size={18} />
                     </button>
                     <button
-                      onClick={() => handleDeleteStudent(s.id)}
-                      className="p-1.5 ml-1 text-slate-400 hover:text-red-400 rounded"
-                      title="Delete"
+                      type="button"
+                      onClick={() => deleteAssignment(a)}
+                      disabled={deleteLoadingId === a._id}
+                      className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-white/5 transition disabled:opacity-50"
+                      title="Delete assignment"
                     >
                       <Trash2 size={18} />
                     </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Add / Edit student modal */}
-      {modalOpen && (
+      {/* Edit assignment deadline modal */}
+      {editingAssignmentId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
           <div className="bg-[#0f0b1a] border border-[#1f1830] rounded-xl w-full max-w-md p-6 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">
-                {editingId ? "Edit student" : "Add student"}
-              </h3>
+              <h3 className="text-lg font-semibold text-white">Edit deadline</h3>
               <button
-                onClick={closeModal}
+                type="button"
+                onClick={closeEditAssignment}
                 className="p-1 text-slate-400 hover:text-white rounded"
               >
                 <X size={22} />
               </button>
             </div>
-            <form onSubmit={handleSubmitStudent} className="space-y-4">
-              {addError && (
-                <p className="text-sm text-red-400 bg-red-900/20 px-3 py-2 rounded-lg">
-                  {addError}
-                </p>
-              )}
-              {editingId ? (
-                <>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Full name</label>
-                    <input
-                      name="fullName"
-                      value={form.fullName}
-                      onChange={handleChange}
-                      required
-                      className="w-full p-3 rounded-lg bg-[#0b0713] border border-[#1f1830] text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Email</label>
-                    <input
-                      name="email"
-                      type="email"
-                      value={form.email}
-                      onChange={handleChange}
-                      required
-                      className="w-full p-3 rounded-lg bg-[#0b0713] border border-[#1f1830] text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-1">Roll No</label>
-                    <input
-                      name="rollNo"
-                      value={form.rollNo}
-                      onChange={handleChange}
-                      className="w-full p-3 rounded-lg bg-[#0b0713] border border-[#1f1830] text-white"
-                    />
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1">
-                    Student email (must be registered on the platform)
-                  </label>
-                  <input
-                    name="email"
-                    type="email"
-                    value={form.email}
-                    onChange={handleChange}
-                    required
-                    placeholder="student@example.com"
-                    className="w-full p-3 rounded-lg bg-[#0b0713] border border-[#1f1830] text-white"
-                  />
-                </div>
-              )}
+            <form onSubmit={saveEditDeadline} className="space-y-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">New deadline</label>
+                <input
+                  type="datetime-local"
+                  value={editDeadline}
+                  onChange={(e) => setEditDeadline(e.target.value)}
+                  required
+                  className="w-full p-3 rounded-lg bg-[#0b0713] border border-[#1f1830] text-white"
+                />
+              </div>
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={closeModal}
+                  onClick={closeEditAssignment}
                   className="px-4 py-2 rounded-lg border border-[#1f1830] text-slate-400 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
+                  disabled={editLoading}
                   className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50"
-                  disabled={addLoading}
                 >
-                  {addLoading ? "Checking…" : editingId ? "Save" : "Add"}
+                  {editLoading ? "Saving…" : "Save"}
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Tab content: Quizzes */}
+      {activeTab === "quizzes" && (
+        <div>
+          <h2 className="text-xl font-semibold text-white mb-4">Quizzes</h2>
+          <p className="text-slate-500 text-sm py-8 text-center rounded-xl bg-[#0b0713] border border-[#1f1830]">
+            No quizzes for this class yet.
+          </p>
         </div>
       )}
 
