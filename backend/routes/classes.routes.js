@@ -47,13 +47,22 @@ const upload = multer({
   }
 });
 
-// GET /api/classes — list classes, optionally filtered by teacher (createdBy); includes studentCount from enrollments
+// GET /api/classes — list classes; by teacher (createdBy) or by enrolled student (enrolledStudent); includes studentCount
 router.get('/', async (req, res) => {
   try {
-    const { createdBy } = req.query;
-    const matchStage = createdBy && mongoose.Types.ObjectId.isValid(createdBy)
-      ? { createdBy: new mongoose.Types.ObjectId(createdBy) }
-      : {};
+    const { createdBy, enrolledStudent } = req.query;
+    let matchStage = {};
+
+    if (enrolledStudent && mongoose.Types.ObjectId.isValid(enrolledStudent)) {
+      const enrollments = await Enrollment.find({ studentId: new mongoose.Types.ObjectId(enrolledStudent) })
+        .select('classId')
+        .lean();
+      const classIds = enrollments.map((e) => e.classId);
+      matchStage = classIds.length > 0 ? { _id: { $in: classIds } } : { _id: { $in: [] } };
+    } else if (createdBy && mongoose.Types.ObjectId.isValid(createdBy)) {
+      matchStage = { createdBy: new mongoose.Types.ObjectId(createdBy) };
+    }
+
     const list = await Class.aggregate([
       { $match: matchStage },
       { $sort: { createdAt: -1 } },
@@ -66,11 +75,21 @@ router.get('/', async (req, res) => {
         }
       },
       {
-        $addFields: {
-          studentCount: { $size: '$_enrollments' }
+        $lookup: {
+          from: 'teachers',
+          localField: 'createdBy',
+          foreignField: '_id',
+          as: '_teacher',
+          pipeline: [{ $project: { fullName: 1 } }]
         }
       },
-      { $project: { _enrollments: 0 } }
+      {
+        $addFields: {
+          studentCount: { $size: '$_enrollments' },
+          teacherName: { $arrayElemAt: ['$_teacher.fullName', 0] }
+        }
+      },
+      { $project: { _enrollments: 0, _teacher: 0 } }
     ]);
     res.json({
       success: true,

@@ -1,38 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ClassroomGrid from './components/ClassroomGrid';
 import AssignmentList from './components/AssignmentList';
 import StatsWidget from './components/StatsWidget';
 
+const API_BASE = "http://localhost:5000";
+
+const GRADIENTS = [
+  "from-purple-600 to-blue-600",
+  "from-cyan-600 to-teal-600",
+  "from-pink-600 to-rose-600",
+  "from-amber-600 to-orange-600",
+  "from-emerald-600 to-teal-600",
+  "from-violet-600 to-purple-600",
+];
+
 const StudentDashboard = () => {
-  const [classes] = useState([
-    {
-      id: 1,
-      name: "Advanced Computer Vision",
-      instructor: "Dr. A. Smith",
-      gradient: "from-purple-600 to-blue-600",
-      assignmentsPending: 2,
-      nextDue: "Today, 11:59 PM",
-      progress: 75
-    },
-    {
-      id: 2,
-      name: "Quantum Physics 101",
-      instructor: "Prof. R. Feynman",
-      gradient: "from-cyan-600 to-teal-600",
-      assignmentsPending: 0,
-      nextDue: "Mon, 9:00 AM",
-      progress: 92
-    },
-    {
-      id: 3,
-      name: "Neural Networks & AI",
-      instructor: "Ms. Sarah Connor",
-      gradient: "from-pink-600 to-rose-600",
-      assignmentsPending: 1,
-      nextDue: "Fri, 5:00 PM",
-      progress: 45
-    },
-  ]);
+  const [classes, setClasses] = useState([]);
+  const [classesLoading, setClassesLoading] = useState(true);
+  const [classesError, setClassesError] = useState(null);
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+  const fetchEnrolledClasses = useCallback(async () => {
+    if (user.role !== "student" || !user.id) {
+      setClasses([]);
+      setClassesLoading(false);
+      return;
+    }
+    setClassesLoading(true);
+    setClassesError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/classes?enrolledStudent=${encodeURIComponent(user.id)}`);
+      const result = await res.json();
+      if (!res.ok) {
+        setClassesError(result.message || "Failed to load classes");
+        setClasses([]);
+        return;
+      }
+      const raw = result.classes || [];
+      setClasses(
+        raw.map((c, i) => ({
+          id: c._id,
+          name: c.title || "—",
+          instructor: c.subject || "—",
+          gradient: GRADIENTS[i % GRADIENTS.length],
+          teacherName: c.teacherName || "—",
+          studentCount: c.studentCount ?? 0,
+        }))
+      );
+    } catch (err) {
+      console.error("Fetch enrolled classes error:", err);
+      setClassesError("Network error. Please try again.");
+      setClasses([]);
+    } finally {
+      setClassesLoading(false);
+    }
+  }, [user.id, user.role]);
+
+  useEffect(() => {
+    fetchEnrolledClasses();
+  }, [fetchEnrolledClasses]);
 
   return (
     <div className="flex h-screen bg-[#0d0620] overflow-hidden font-sans text-white">
@@ -42,7 +68,12 @@ const StudentDashboard = () => {
         
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-8 scrollbar-hide">
-          <ClassroomGrid classes={classes} />
+          <ClassroomGrid
+            classes={classes}
+            classesLoading={classesLoading}
+            classesError={classesError}
+            onJoinSuccess={fetchEnrolledClasses}
+          />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <AssignmentList />
             <StatsWidget />

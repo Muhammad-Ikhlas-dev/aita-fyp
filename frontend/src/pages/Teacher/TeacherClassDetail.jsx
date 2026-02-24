@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, Trash2, X, ClipboardCheck, ClipboardList, Calendar, FileText, Users, HelpCircle, Download, Link2, Copy, Check } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, X, ClipboardCheck, ClipboardList, Calendar, FileText, Users, HelpCircle, Download, Link2, Copy, Check, FolderOpen, Eye } from "lucide-react";
 
 const API_BASE = "http://localhost:5000";
 
@@ -49,6 +49,10 @@ const TeacherClassDetail = () => {
 
   const [activeTab, setActiveTab] = useState("students"); // "students" | "assignments" | "quizzes"
   const [joinLinkCopied, setJoinLinkCopied] = useState(false);
+
+  const [submissionsModal, setSubmissionsModal] = useState(null); // { assignmentId, title }
+  const [submissionsList, setSubmissionsList] = useState([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
 
   // API: GET /api/attendance?classId= — load attendance logs for "Show attendance" modal
   const fetchAttendanceRecords = async () => {
@@ -102,6 +106,34 @@ const TeacherClassDetail = () => {
     setEditingAssignmentId(null);
     setEditDeadline("");
   };
+
+  const openSubmissionsModal = (a) => {
+    setSubmissionsModal({ assignmentId: a._id, title: a.title });
+    setSubmissionsList([]);
+  };
+
+  const closeSubmissionsModal = () => {
+    setSubmissionsModal(null);
+    setSubmissionsList([]);
+  };
+
+  useEffect(() => {
+    if (!submissionsModal?.assignmentId) return;
+    let cancelled = false;
+    setSubmissionsLoading(true);
+    fetch(`${API_BASE}/api/submissions/list?assignmentId=${encodeURIComponent(submissionsModal.assignmentId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data.success) setSubmissionsList(data.submissions || []);
+      })
+      .catch(() => {
+        if (!cancelled) setSubmissionsList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSubmissionsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [submissionsModal?.assignmentId]);
 
   const saveEditDeadline = async (e) => {
     e.preventDefault();
@@ -484,6 +516,14 @@ const TeacherClassDetail = () => {
                   <div className="flex items-center gap-1 shrink-0 self-center">
                     <button
                       type="button"
+                      onClick={() => openSubmissionsModal(a)}
+                      className="p-2 text-slate-400 hover:text-cyan-400 rounded-lg hover:bg-white/5 transition"
+                      title="View submissions"
+                    >
+                      <FolderOpen size={18} />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => openEditAssignment(a)}
                       className="p-2 text-slate-400 hover:text-cyan-400 rounded-lg hover:bg-white/5 transition"
                       title="Edit deadline"
@@ -549,6 +589,59 @@ const TeacherClassDetail = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View submissions modal */}
+      {submissionsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-[#0f0b1a] border border-[#1f1830] rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b border-[#1f1830]">
+              <h3 className="text-lg font-semibold text-white">
+                Submissions — {submissionsModal.title}
+              </h3>
+              <button
+                type="button"
+                onClick={closeSubmissionsModal}
+                className="p-1 text-slate-400 hover:text-white rounded"
+              >
+                <X size={22} />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto flex-1">
+              {submissionsLoading ? (
+                <p className="text-slate-400 text-sm py-6 text-center">Loading submissions…</p>
+              ) : submissionsList.length === 0 ? (
+                <p className="text-slate-500 text-sm py-6 text-center">No submissions yet for this assignment.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {submissionsList.map((s) => (
+                    <li
+                      key={s._id}
+                      className="flex items-center justify-between gap-4 p-3 rounded-lg bg-[#0b0713] border border-[#1f1830]"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-white truncate">{s.studentName}</p>
+                        <p className="text-slate-400 text-sm truncate">{s.email}</p>
+                        <p className="text-slate-500 text-xs mt-0.5">
+                          {s.originalName} — {s.submittedAt ? formatDateDMY(s.submittedAt) : "—"}
+                        </p>
+                      </div>
+                      <a
+                        href={`${API_BASE}/api/submissions/${s._id}/file`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-cyan-600/20 text-cyan-400 border border-cyan-500/40 hover:bg-cyan-600/30 text-sm"
+                      >
+                        <Eye size={16} />
+                        Preview
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       )}

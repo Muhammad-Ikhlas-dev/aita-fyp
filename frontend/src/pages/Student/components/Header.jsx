@@ -11,6 +11,7 @@ const Header = ({ sidebarOpen, toggleSidebar }) => {
   ]);
 
   const notifRef = useRef(null);
+  const user = JSON.parse(localStorage.getItem("user"));
 
   // Close dropdown if clicked outside
   useEffect(() => {
@@ -41,7 +42,7 @@ const Header = ({ sidebarOpen, toggleSidebar }) => {
         <h1 className="text-2xl font-bold">
           Welcome back,{" "}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">
-            Huzaifa
+            {user.fullName}
           </span>
         </h1>
       </div>

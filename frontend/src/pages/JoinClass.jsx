@@ -11,6 +11,8 @@ export default function JoinClass() {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
 
   useEffect(() => {
     const raw = localStorage.getItem("user");
@@ -63,11 +65,36 @@ export default function JoinClass() {
     navigate(`/signin?redirect=${encodeURIComponent(redirect)}`, { replace: true });
   }, [loading, user, navigate, code]);
 
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file (e.g. JPG, PNG).");
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      return;
+    }
+    setError(null);
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
   const handleJoin = async () => {
     if (!classInfo?.classId || !user?.id) return;
+    if (!photoFile) {
+      setError("Please upload your photo first. It will be used for attendance in this class.");
+      return;
+    }
     setJoining(true);
     setError(null);
     try {
+      // Enroll first; only upload photo if student is not already in the class
       const res = await fetch(`${API_BASE}/classes/${classInfo.classId}/students`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -77,9 +104,27 @@ export default function JoinClass() {
       if (!res.ok) {
         if (res.status === 409) {
           setError("You are already in this class.");
+          setJoining(false);
           return;
         }
         setError(result.message || "Could not join class.");
+        setJoining(false);
+        return;
+      }
+
+      // Enrollment succeeded — now store photo so it appears in Mark Attendance for this class
+      const formData = new FormData();
+      formData.append("image", photoFile);
+      const name = (user.fullName || user.email || "Student").trim();
+      const uploadUrl = `${API_BASE}/upload?name=${encodeURIComponent(name)}&classId=${encodeURIComponent(classInfo.classId)}`;
+      const uploadRes = await fetch(uploadUrl, {
+        method: "POST",
+        body: formData,
+      });
+      const uploadResult = await uploadRes.json();
+      if (!uploadRes.ok || !uploadResult.success) {
+        setError(uploadResult.message || "Photo upload failed. Please try again.");
+        setJoining(false);
         return;
       }
       navigate("/student/dashboard", { replace: true });
@@ -130,6 +175,29 @@ export default function JoinClass() {
       <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8 max-w-md w-full">
         <h1 className="text-2xl font-semibold mb-2">Join class</h1>
         <p className="text-slate-300 mb-6">You’re about to join: <strong className="text-white">{classInfo.title}</strong></p>
+
+        {/* Photo for attendance (same storage as Mark Attendance upload) */}
+        <div className="mb-6">
+          <label className="block text-sm text-slate-300 mb-2">Your photo for attendance (required)</label>
+          <p className="text-xs text-slate-500 mb-2">This photo will appear on the teacher’s Mark Attendance page for this class.</p>
+          <div className="flex flex-col items-center gap-3">
+            <label className="w-full flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/20 hover:border-[#9B37FF]/50 bg-white/5 p-6 cursor-pointer transition">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="hidden"
+              />
+              {photoPreview ? (
+                <img src={photoPreview} alt="Preview" className="w-24 h-24 rounded-full object-cover border-2 border-white/20" />
+              ) : (
+                <span className="text-4xl mb-2">📷</span>
+              )}
+              <span className="text-sm text-slate-400">{photoFile ? photoFile.name : "Choose a photo"}</span>
+            </label>
+          </div>
+        </div>
+
         {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
         <div className="flex gap-3">
           <button

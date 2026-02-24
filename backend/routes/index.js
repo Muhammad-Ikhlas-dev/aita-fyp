@@ -7,11 +7,13 @@ const authRoutes = require('./auth.routes');
 const classesRoutes = require('./classes.routes');
 const aiRoutes = require('./ai.routes');
 const assignmentsRoutes = require('./assignments.routes');
+const submissionsRoutes = require('./submissions.routes');
 
 const router = express.Router();
 
 router.use('/upload', uploadRoutes);
 router.use('/assignments', assignmentsRoutes);
+router.use('/submissions', submissionsRoutes);
 router.use('/students', studentsRoutes);
 router.use('/attendance', attendanceRoutes);
 router.use('/health', healthRoutes);

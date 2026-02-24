@@ -13,6 +13,7 @@ const Pricing = lazy(() => import("./pages/Pricing"));
 // Student pages (existing)
 const StudentLayout = lazy(() => import("./pages/Student/StudentLayout"));
 const StudentDashboard = lazy(() => import("./pages/Student/StudentDashboard"));
+const StudentClassDetail = lazy(() => import("./pages/Student/StudentClassDetail"));
 const StudentAssignment = lazy(() => import("./pages/Student/StudentAssignment"));
 const StudentResult = lazy(() => import("./pages/Student/StudentResult"));
 const StudentSetting = lazy(() => import("./pages/Student/StudentSetting"));
@@ -49,6 +50,7 @@ function App() {
         {/* Student Routes */}
         <Route path="/student" element={<StudentLayout />}>
           <Route path="dashboard" element={<StudentDashboard />} />
+          <Route path="classes/:classId" element={<StudentClassDetail />} />
           <Route path="assignment" element={<StudentAssignment />} />
           <Route path="result" element={<StudentResult />} />
           <Route path="settings" element={<StudentSetting />} />

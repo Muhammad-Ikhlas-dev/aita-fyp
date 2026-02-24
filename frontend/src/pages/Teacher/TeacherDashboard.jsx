@@ -15,10 +15,27 @@ function formatScheduleTime(timeStr) {
   return `${h}:${m} ${ampm}`;
 }
 
+function formatDue(deadline) {
+  if (!deadline) return "—";
+  const d = new Date(deadline);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const dueDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (dueDate.getTime() === today.getTime()) return "Today";
+  if (dueDate.getTime() === tomorrow.getTime()) return "Tomorrow";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
+}
+
 const TeacherDashboard = () => {
   const [classes, setClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(true);
   const [classesError, setClassesError] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(true);
+  const [assignmentsError, setAssignmentsError] = useState(null);
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   // API: GET /api/classes?createdBy= — load teacher's classes for "Your Classes" card on mount
   useEffect(() => {
@@ -26,7 +43,6 @@ const TeacherDashboard = () => {
       setClassesLoading(true);
       setClassesError(null);
       try {
-        const user = JSON.parse(localStorage.getItem("user") || "{}");
         const url =
           user.role === "teacher" && user.id
             ? `${API_BASE}/api/classes?createdBy=${user.id}`
@@ -50,6 +66,36 @@ const TeacherDashboard = () => {
     fetchClasses();
   }, []);
 
+  // API: GET /api/assignments?createdBy= — load teacher's assignments for "Assignments Created" card
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      if (user.role !== "teacher" || !user.id) {
+        setAssignments([]);
+        setAssignmentsLoading(false);
+        return;
+      }
+      setAssignmentsLoading(true);
+      setAssignmentsError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/assignments?createdBy=${encodeURIComponent(user.id)}`);
+        const result = await res.json();
+        if (!res.ok) {
+          setAssignmentsError(result.message || "Failed to load assignments");
+          setAssignments([]);
+          return;
+        }
+        setAssignments(result.assignments || []);
+      } catch (err) {
+        console.error("Fetch assignments error:", err);
+        setAssignmentsError("Network error. Please try again.");
+        setAssignments([]);
+      } finally {
+        setAssignmentsLoading(false);
+      }
+    };
+    fetchAssignments();
+  }, []);
+
   const recentSubmissions = [
     { id: 1, student: "Sara Khan", assignment: "Edge Detection", time: "2h ago", grade: "Pending" },
     { id: 2, student: "Ali Nawaz", assignment: "Backpropagation Essay", time: "1d ago", grade: "A-" },
@@ -58,7 +104,7 @@ const TeacherDashboard = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Welcome back, Aria</h1>
+        <h1 className="text-3xl font-bold">Welcome back, {user.fullName || "Aria"}</h1>
         <div className="flex gap-2">
           <Link to="/teacher/create-class" className="px-4 py-2 rounded-lg bg-sky-600/90 hover:bg-sky-600">
             Create Class
@@ -117,25 +163,38 @@ const TeacherDashboard = () => {
 
         <TeacherCard title="Assignments Created" subtitle="Recent & drafts">
           <div className="flex flex-col gap-3 overflow-y-auto max-h-[280px] pr-1">
-            <div className="p-3 bg-[#0b0713] rounded-md border border-[#1f1830] flex items-center justify-between">
-              <div>
-                <div className="font-medium">Edge Detection Algorithm</div>
-                <div className="text-xs text-slate-400">Computer Vision • Draft</div>
-              </div>
-              <div className="text-xs text-slate-400">Due: Today</div>
-            </div>
-
-            <div className="p-3 bg-[#0b0713] rounded-md border border-[#1f1830] flex items-center justify-between">
-              <div>
-                <div className="font-medium">Backpropagation Essay</div>
-                <div className="text-xs text-slate-400">Neural Networks • Published</div>
-              </div>
-              <div className="text-xs text-slate-400">Due: Tomorrow</div>
-            </div>
-
-            <div className="pt-2">
-              <Link to="/teacher/assignments" className="text-sm text-sky-300">View all assignments →</Link>
-            </div>
+            {assignmentsLoading ? (
+              <p className="text-sm text-slate-400 py-2">Loading assignments…</p>
+            ) : assignmentsError ? (
+              <p className="text-sm text-red-400 py-2">{assignmentsError}</p>
+            ) : assignments.length === 0 ? (
+              <p className="text-sm text-slate-400 py-2">No assignments yet. Create one from Assignments.</p>
+            ) : (
+              assignments.map((a) => {
+                const classIds = a.classIds || [];
+                const subjectLabel =
+                  classIds.length === 0
+                    ? "—"
+                    : classIds.length === 1
+                      ? (classes.find((c) => String(c._id) === String(classIds[0]))?.subject || "—")
+                      : classIds
+                          .map((id) => classes.find((c) => String(c._id) === String(id))?.subject)
+                          .filter(Boolean)
+                          .join(", ") || "—";
+                return (
+                  <div
+                    key={a._id}
+                    className="p-3 bg-[#0b0713] rounded-md border border-[#1f1830] flex items-center justify-between shrink-0"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{a.title}</div>
+                      <div className="text-xs text-slate-400">{subjectLabel || "—"}</div>
+                    </div>
+                    <div className="text-xs text-slate-400 shrink-0 ml-2">Due: {formatDue(a.deadline)}</div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </TeacherCard>
 
