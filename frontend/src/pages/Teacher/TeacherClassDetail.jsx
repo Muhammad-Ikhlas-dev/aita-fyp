@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, Trash2, X, ClipboardCheck, ClipboardList, Calendar, FileText, Users, HelpCircle, Download, Link2, Copy, Check, FolderOpen, Eye } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, X, ClipboardCheck, ClipboardList, Calendar, FileText, Users, HelpCircle, Download, Link2, Copy, Check, FolderOpen, Eye, ShieldAlert, MessageSquare } from "lucide-react";
 
 const API_BASE = "http://localhost:5000";
 
@@ -53,6 +53,12 @@ const TeacherClassDetail = () => {
   const [submissionsModal, setSubmissionsModal] = useState(null); // { assignmentId, title }
   const [submissionsList, setSubmissionsList] = useState([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
+
+  const [plagiarismLoading, setPlagiarismLoading] = useState(false);
+  const [plagiarismResults, setPlagiarismResults] = useState(null); // { assignmentTitle, totalSubmissions, results, studentSummary }
+  const [showPlagiarismModal, setShowPlagiarismModal] = useState(false);
+  const [showAssignmentMarks, setShowAssignmentMarks] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState(null); // { studentName, feedback }
 
   // API: GET /api/attendance?classId= — load attendance logs for "Show attendance" modal
   const fetchAttendanceRecords = async () => {
@@ -110,11 +116,61 @@ const TeacherClassDetail = () => {
   const openSubmissionsModal = (a) => {
     setSubmissionsModal({ assignmentId: a._id, title: a.title });
     setSubmissionsList([]);
+    setPlagiarismResults(null);
+    setShowAssignmentMarks(false);
+  };
+
+  const exportResultsToCsv = () => {
+    if (!submissionsModal?.title || !showAssignmentMarks) return;
+    const escapeCsv = (v) => {
+      const s = String(v ?? "");
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const header = "Student Name,Roll No,Marks";
+    const rows = submissionsList.map((s) => {
+      const name = escapeCsv(s.studentName);
+      const rollNo = escapeCsv(s.rollNo ?? s.roll_no ?? "");
+      const marks = (s.score != null || s.aiGrade?.score != null) ? String(Number(s.score ?? s.aiGrade?.score)) : "—";
+      return `${name},${rollNo},${escapeCsv(marks)}`;
+    });
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${submissionsModal.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_results.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const closeSubmissionsModal = () => {
     setSubmissionsModal(null);
     setSubmissionsList([]);
+    setPlagiarismResults(null);
+  };
+
+  const checkPlagiarism = async () => {
+    if (!submissionsModal?.assignmentId) return;
+    setPlagiarismLoading(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/plagiarism/check?assignmentId=${encodeURIComponent(submissionsModal.assignmentId)}`,
+        { method: 'POST' }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || 'Failed to check plagiarism');
+        return;
+      }
+      setPlagiarismResults(data);
+      setShowPlagiarismModal(true);
+    } catch (err) {
+      console.error('Plagiarism check error:', err);
+      alert('Network error. Please try again.');
+    } finally {
+      setPlagiarismLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -601,13 +657,34 @@ const TeacherClassDetail = () => {
               <h3 className="text-lg font-semibold text-white">
                 Submissions — {submissionsModal.title}
               </h3>
-              <button
-                type="button"
-                onClick={closeSubmissionsModal}
-                className="p-1 text-slate-400 hover:text-white rounded"
-              >
-                <X size={22} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignmentMarks(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600/20 text-cyan-400 border border-cyan-500/40 hover:bg-cyan-600/30 text-sm transition"
+                  title="Show AI marks for each submission"
+                >
+                  <ClipboardCheck size={16} />
+                  Check assignments
+                </button>
+                <button
+                  type="button"
+                  onClick={checkPlagiarism}
+                  disabled={plagiarismLoading || submissionsList.length < 2}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600/20 text-amber-400 border border-amber-500/40 hover:bg-amber-600/30 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  title={submissionsList.length < 2 ? 'Need at least 2 submissions' : 'Check plagiarism across all submissions'}
+                >
+                  <ShieldAlert size={16} />
+                  {plagiarismLoading ? 'Checking…' : 'Check Plagiarism'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeSubmissionsModal}
+                  className="p-1 text-slate-400 hover:text-white rounded"
+                >
+                  <X size={22} />
+                </button>
+              </div>
             </div>
             <div className="p-4 overflow-auto flex-1">
               {submissionsLoading ? (
@@ -623,11 +700,30 @@ const TeacherClassDetail = () => {
                     >
                       <div className="min-w-0">
                         <p className="font-medium text-white truncate">{s.studentName}</p>
+                        <p className="text-slate-400 text-sm truncate">
+                          Roll No: {(s.rollNo ?? s.roll_no ?? "").trim() || "—"}
+                        </p>
                         <p className="text-slate-400 text-sm truncate">{s.email}</p>
                         <p className="text-slate-500 text-xs mt-0.5">
                           {s.originalName} — {s.submittedAt ? formatDateDMY(s.submittedAt) : "—"}
                         </p>
                       </div>
+                      {showAssignmentMarks && (
+                        <span className="shrink-0 w-12 text-center font-semibold text-cyan-400">
+                          {(s.score != null || s.aiGrade?.score != null)
+                            ? `${Number(s.score ?? s.aiGrade?.score)}/10`
+                            : "—"}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setFeedbackModal({ studentName: s.studentName, feedback: s.aiGrade?.feedback ?? "" })}
+                        className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600/20 text-violet-300 border border-violet-500/40 hover:bg-violet-600/30 text-sm transition"
+                        title="View AI feedback"
+                      >
+                        <MessageSquare size={16} />
+                        View AI feedback
+                      </button>
                       <a
                         href={`${API_BASE}/api/submissions/${s._id}/file`}
                         target="_blank"
@@ -642,6 +738,43 @@ const TeacherClassDetail = () => {
                 </ul>
               )}
             </div>
+            <div className="p-4 border-t border-[#1f1830] flex justify-end">
+              <button
+                type="button"
+                onClick={exportResultsToCsv}
+                disabled={!showAssignmentMarks || submissionsList.length === 0}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600/30 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title={!showAssignmentMarks ? "Click 'Check assignments' first to export" : "Download results as CSV (opens in Excel)"}
+              >
+                <Download size={18} />
+                Export results
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI feedback modal */}
+      {feedbackModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-[#0f0b1a] border border-[#1f1830] rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-[#1f1830]">
+              <h3 className="text-lg font-semibold text-white">
+                AI feedback — {feedbackModal.studentName}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setFeedbackModal(null)}
+                className="p-1 text-slate-400 hover:text-white rounded"
+              >
+                <X size={22} />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto flex-1">
+              <p className="text-slate-300 whitespace-pre-wrap">
+                {feedbackModal.feedback.trim() || "No feedback available for this submission."}
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -653,6 +786,154 @@ const TeacherClassDetail = () => {
           <p className="text-slate-500 text-sm py-8 text-center rounded-xl bg-[#0b0713] border border-[#1f1830]">
             No quizzes for this class yet.
           </p>
+        </div>
+      )}
+
+      {/* Plagiarism results modal */}
+      {showPlagiarismModal && plagiarismResults && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-[#0f0b1a] border border-[#1f1830] rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-[#1f1830]">
+              <div>
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <ShieldAlert size={20} className="text-amber-400" />
+                  Plagiarism Report — {plagiarismResults.assignmentTitle}
+                </h3>
+                <p className="text-slate-400 text-xs mt-0.5">
+                  {plagiarismResults.totalSubmissions} submission{plagiarismResults.totalSubmissions !== 1 ? 's' : ''} analysed
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPlagiarismModal(false)}
+                className="p-1 text-slate-400 hover:text-white rounded"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-auto flex-1 space-y-6">
+              {plagiarismResults.results.length === 0 ? (
+                <p className="text-slate-500 text-sm py-6 text-center">
+                  {plagiarismResults.message || 'No pairs to compare.'}
+                </p>
+              ) : (
+                <>
+                  {/* Per-student summary */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Student Summary</h4>
+                    <div className="border border-[#1f1830] rounded-lg overflow-hidden">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="bg-[#1f1830] text-slate-400">
+                            <th className="p-3 font-medium">Student</th>
+                            <th className="p-3 font-medium">Max Similarity</th>
+                            <th className="p-3 font-medium">Most Similar To</th>
+                            <th className="p-3 font-medium">Risk</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {plagiarismResults.studentSummary.map((s, idx) => (
+                            <tr key={idx} className="border-t border-[#1f1830] hover:bg-white/5">
+                              <td className="p-3">
+                                <p className="text-white font-medium">{s.studentName}</p>
+                                <p className="text-slate-500 text-xs">{s.email}</p>
+                              </td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-24 h-2 rounded-full bg-[#1f1830] overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        s.level === 'high' ? 'bg-red-500' :
+                                        s.level === 'medium' ? 'bg-amber-400' : 'bg-emerald-500'
+                                      }`}
+                                      style={{ width: `${s.maxSimilarity}%` }}
+                                    />
+                                  </div>
+                                  <span className={`font-semibold ${
+                                    s.level === 'high' ? 'text-red-400' :
+                                    s.level === 'medium' ? 'text-amber-400' : 'text-emerald-400'
+                                  }`}>{s.maxSimilarity}%</span>
+                                </div>
+                              </td>
+                              <td className="p-3 text-slate-300">{s.mostSimilarTo}</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  s.level === 'high' ? 'bg-red-500/20 text-red-400 border border-red-500/40' :
+                                  s.level === 'medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
+                                  'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                }`}>
+                                  {s.level === 'high' ? 'High Risk' : s.level === 'medium' ? 'Medium Risk' : 'Low Risk'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Pairwise comparison */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">Pairwise Comparison</h4>
+                    <div className="border border-[#1f1830] rounded-lg overflow-hidden">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="bg-[#1f1830] text-slate-400">
+                            <th className="p-3 font-medium">Student A</th>
+                            <th className="p-3 font-medium">Student B</th>
+                            <th className="p-3 font-medium">Similarity</th>
+                            <th className="p-3 font-medium">Risk</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {plagiarismResults.results.map((pair, idx) => (
+                            <tr key={idx} className="border-t border-[#1f1830] hover:bg-white/5">
+                              <td className="p-3 text-slate-200">{pair.studentA.name}</td>
+                              <td className="p-3 text-slate-200">{pair.studentB.name}</td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 h-2 rounded-full bg-[#1f1830] overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        pair.level === 'high' ? 'bg-red-500' :
+                                        pair.level === 'medium' ? 'bg-amber-400' : 'bg-emerald-500'
+                                      }`}
+                                      style={{ width: `${pair.similarityPercent}%` }}
+                                    />
+                                  </div>
+                                  <span className={`font-medium ${
+                                    pair.level === 'high' ? 'text-red-400' :
+                                    pair.level === 'medium' ? 'text-amber-400' : 'text-emerald-400'
+                                  }`}>{pair.similarityPercent}%</span>
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  pair.level === 'high' ? 'bg-red-500/20 text-red-400 border border-red-500/40' :
+                                  pair.level === 'medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
+                                  'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                }`}>
+                                  {pair.level === 'high' ? 'High' : pair.level === 'medium' ? 'Medium' : 'Low'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex items-center gap-6 text-xs text-slate-500 pt-1">
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> High Risk ≥ 70%</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-400 inline-block" /> Medium Risk 40–69%</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" /> Low Risk &lt; 40%</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

@@ -60,18 +60,26 @@ router.post('/signup', async (req, res) => {
     }
 
     if (role === 'student') {
-      const existing = await Student.findOne({ email: normalizedEmail });
-      if (existing) {
+      const existingByEmail = await Student.findOne({ email: normalizedEmail });
+      if (existingByEmail) {
         return res.status(409).json({
           success: false,
           message: 'A student with this email already exists'
+        });
+      }
+      const normalizedRollNo = rollNo.trim();
+      const existingByRollNo = await Student.findOne({ rollNo: normalizedRollNo });
+      if (existingByRollNo) {
+        return res.status(409).json({
+          success: false,
+          message: 'This roll number is already registered. Please use a different roll number or sign in.'
         });
       }
       const student = await Student.create({
         fullName: fullName.trim(),
         email: normalizedEmail,
         password: hashedPassword,
-        rollNo: rollNo.trim()
+        rollNo: normalizedRollNo
       });
       return res.status(201).json({
         success: true,

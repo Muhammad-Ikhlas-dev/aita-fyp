@@ -1,6 +1,8 @@
 import { inputClass, roleButtonClass, nextButtonClass } from "./constants";
 
-export default function SignupForm({ role, setRole, register, errors, setValue, handleSubmit, submitting = false }) {
+export default function SignupForm({ role, setRole, register, errors, setValue, handleSubmit, submitting = false, submitError = null }) {
+  const isRollNoError = role === "student" && submitError && (submitError.toLowerCase().includes("roll number") || submitError.toLowerCase().includes("roll no"));
+
   return (
     <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
       <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-4 text-center">Sign Up</h1>
@@ -9,9 +11,12 @@ export default function SignupForm({ role, setRole, register, errors, setValue, 
       {errors.fullName && <p className="text-red-400 text-xs">{errors.fullName.message}</p>}
 
       {role === "student" && (
-        <input {...register("rollNo")} type="text" placeholder="Roll No" className={inputClass} />
+        <>
+          <input {...register("rollNo")} type="text" placeholder="Roll No" className={inputClass} />
+          {errors.rollNo && <p className="text-red-400 text-xs">{errors.rollNo?.message}</p>}
+          
+        </>
       )}
-      {errors.rollNo && <p className="text-red-400 text-xs">{errors.rollNo?.message}</p>}
 
       <input {...register("email")} type="email" placeholder="Email" className={inputClass} />
       {errors.email && <p className="text-red-400 text-xs">{errors.email?.message}</p>}

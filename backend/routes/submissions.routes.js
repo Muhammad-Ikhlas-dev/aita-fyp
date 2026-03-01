@@ -3,10 +3,105 @@ const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const mammoth = require('mammoth');
+const { extractText } = require('unpdf');
 const AssignmentSubmission = require('../schemas/AssignmentSubmission');
 const Assignment = require('../schemas/Assignment');
+const Student = require('../schemas/Student');
 
 const router = express.Router();
+
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+// ── Text extraction (for AI grading) ──────────────────────────────────────────
+async function extractTextFromPDF(filePath) {
+  const buffer = fs.readFileSync(filePath);
+  const uint8 = new Uint8Array(buffer);
+  const { text } = await extractText(uint8, { mergePages: true });
+  return Array.isArray(text) ? text.join(' ') : (text || '');
+}
+
+async function extractTextFromDOCX(filePath) {
+  const result = await mammoth.extractRawText({ path: filePath });
+  return result.value || '';
+}
+
+async function extractTextFromFile(filePath, mimeType) {
+  const ext = path.extname(filePath).toLowerCase();
+  try {
+    if (ext === '.pdf' || mimeType === 'application/pdf') {
+      return await extractTextFromPDF(filePath);
+    }
+    if (
+      ext === '.docx' ||
+      ext === '.doc' ||
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      mimeType === 'application/msword'
+    ) {
+      return await extractTextFromDOCX(filePath);
+    }
+    return fs.readFileSync(filePath, 'utf8');
+  } catch (err) {
+    console.error('Extract submission text error:', err.message);
+    return '';
+  }
+}
+
+// ── Gemini grading (one submission at a time) ─────────────────────────────────
+function getGeminiUrl() {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  return `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+}
+
+async function gradeSubmissionWithGemini(assignmentTitle, assignmentInstructions, submissionText) {
+  const url = getGeminiUrl();
+  if (!url) throw new Error('GEMINI_API_KEY is not configured');
+
+  const prompt = `You are grading a student assignment submission. Give a single overall mark out of 10, regardless of how many questions the assignment has. Reply with ONLY a valid JSON object, no other text. Use exactly these keys: "score" (number from 0 to 10, can use decimals e.g. 7.5) and "feedback" (string, brief feedback for the student).
+
+Assignment title: ${assignmentTitle || '(not provided)'}
+Assignment instructions: ${assignmentInstructions || '(none)'}
+
+Student submission text:
+---
+${(submissionText || '').slice(0, 80000)}
+---
+
+Respond with only: {"score": <0-10>, "feedback": "<your feedback>"}`;
+
+  console.log('[Gemini] Grading submission: calling API...');
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json' },
+    }),
+  });
+
+  console.log('[Gemini] Response status:', res.status, res.statusText, '| ok:', res.ok);
+  if (!res.ok) {
+    const err = await res.text();
+    console.error('[Gemini] Error response body:', err);
+    throw new Error(`Gemini API ${res.status}: ${err}`);
+  }
+
+  const data = await res.json();
+  const part = data.candidates?.[0]?.content?.parts?.[0];
+  if (!part || part.text == null) {
+    console.error('[Gemini] Invalid response format. Full response:', JSON.stringify(data, null, 2));
+    throw new Error('Invalid Gemini response');
+  }
+  const raw = part.text.trim();
+  console.log('[Gemini] Raw response text:', raw);
+
+  const parsed = JSON.parse(raw);
+  const score = typeof parsed.score === 'number' ? Math.min(10, Math.max(0, parsed.score)) : null;
+  const feedback = typeof parsed.feedback === 'string' ? parsed.feedback.slice(0, 2000) : '';
+  console.log('[Gemini] Parsed grade — score:', score, '| feedback:', feedback);
+  return { score, feedback };
+}
 
 const submissionsDir = path.join(__dirname, '..', 'assignment_submissions');
 if (!fs.existsSync(submissionsDir)) {
@@ -82,6 +177,8 @@ router.post('/', uploadSubmission.single('file'), async (req, res) => {
           originalName: req.file.originalname || path.basename(req.file.path),
           mimeType: req.file.mimetype,
           submittedAt: new Date(),
+          gradingStatus: 'pending',
+          aiGrade: { score: null, feedback: null },
         }
       );
     } else {
@@ -91,10 +188,53 @@ router.post('/', uploadSubmission.single('file'), async (req, res) => {
         filePath: req.file.path,
         originalName: req.file.originalname || path.basename(req.file.path),
         mimeType: req.file.mimetype,
+        gradingStatus: 'pending',
+        aiGrade: { score: null, feedback: null },
       });
     }
 
-    const updated = await AssignmentSubmission.findOne({ assignmentId, studentId }).lean();
+    let updated = await AssignmentSubmission.findOne({ assignmentId, studentId }).lean();
+
+    // AI grading: extract text, call Gemini, store score and feedback
+    const filePath = path.isAbsolute(req.file.path) ? req.file.path : path.join(__dirname, '..', req.file.path);
+    const submissionText = await extractTextFromFile(filePath, req.file.mimetype);
+    try {
+      console.log('[Gemini] Starting AI grade for submission', updated._id);
+      const { score, feedback } = await gradeSubmissionWithGemini(
+        assignment.title,
+        assignment.instructions,
+        submissionText
+      );
+      console.log('[Gemini] Grading success. Saving to DB — score:', score, 'feedback length:', (feedback || '').length);
+      await AssignmentSubmission.findByIdAndUpdate(
+        updated._id,
+        {
+          $set: {
+            gradingStatus: 'graded',
+            'aiGrade.score': score,
+            'aiGrade.feedback': feedback == null ? '' : feedback,
+          },
+        },
+        { new: true }
+      );
+      updated = await AssignmentSubmission.findOne({ assignmentId, studentId }).lean();
+    } catch (gradeErr) {
+      console.error('[Gemini] AI grading failed for submission:', updated._id, '—', gradeErr.message);
+      if (gradeErr.stack) console.error(gradeErr.stack);
+      await AssignmentSubmission.findByIdAndUpdate(
+        updated._id,
+        {
+          $set: {
+            gradingStatus: 'failed',
+            'aiGrade.score': null,
+            'aiGrade.feedback': null,
+          },
+        },
+        { new: true }
+      );
+      updated = await AssignmentSubmission.findOne({ assignmentId, studentId }).lean();
+    }
+
     res.status(201).json({
       success: true,
       message: 'Assignment turned in',
@@ -104,6 +244,8 @@ router.post('/', uploadSubmission.single('file'), async (req, res) => {
         studentId: updated.studentId,
         originalName: updated.originalName,
         submittedAt: updated.submittedAt,
+        gradingStatus: updated.gradingStatus,
+        aiGrade: updated.aiGrade ? { score: updated.aiGrade.score, feedback: updated.aiGrade.feedback } : null,
       },
     });
   } catch (error) {
@@ -115,7 +257,7 @@ router.post('/', uploadSubmission.single('file'), async (req, res) => {
   }
 });
 
-// GET /api/submissions/list?assignmentId= — list all submissions for an assignment (for teacher), with student names
+// GET /api/submissions/list?assignmentId= — list all submissions for an assignment (for teacher), with student names and rollNo from students table
 router.get('/list', async (req, res) => {
   try {
     const { assignmentId } = req.query;
@@ -125,18 +267,32 @@ router.get('/list', async (req, res) => {
     const list = await AssignmentSubmission.find({
       assignmentId: new mongoose.Types.ObjectId(assignmentId),
     })
-      .populate('studentId', 'fullName email')
+      .select('assignmentId studentId originalName submittedAt gradingStatus aiGrade')
       .sort({ submittedAt: -1 })
       .lean();
-    const submissions = list.map((s) => ({
-      _id: s._id,
-      assignmentId: s.assignmentId,
-      studentId: s.studentId?._id,
-      studentName: s.studentId?.fullName || '—',
-      email: s.studentId?.email || '',
-      originalName: s.originalName,
-      submittedAt: s.submittedAt,
-    }));
+    const studentIds = [...new Set(list.map((s) => s.studentId?.toString()).filter(Boolean))];
+    const studentsFromDb = await Student.find({ _id: { $in: studentIds } })
+      .select('_id fullName email rollNo')
+      .lean();
+    const studentMap = new Map(studentsFromDb.map((st) => [st._id.toString(), st]));
+    const submissions = list.map((s) => {
+      const score = s.aiGrade?.score != null ? s.aiGrade.score : null;
+      const student = s.studentId ? studentMap.get(s.studentId.toString()) : null;
+      const rollNo = student ? (student.rollNo ?? student.roll_no ?? '') : '';
+      return {
+        _id: s._id,
+        assignmentId: s.assignmentId,
+        studentId: s.studentId,
+        studentName: student?.fullName || '—',
+        email: student?.email || '',
+        rollNo,
+        originalName: s.originalName,
+        submittedAt: s.submittedAt,
+        gradingStatus: s.gradingStatus || 'pending',
+        score,
+        aiGrade: s.aiGrade ? { score: s.aiGrade.score, feedback: s.aiGrade.feedback } : null,
+      };
+    });
     res.json({
       success: true,
       submissions,

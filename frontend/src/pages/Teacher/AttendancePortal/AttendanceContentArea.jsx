@@ -120,7 +120,7 @@ const [students, setStudents] = useState([]);
 
             {/* Student List Dashboard */}
             <div className="mb-12">
-                <StudentList fetchStudents={fetchStudents} students={students} studentsLoading={studentsLoading} studentsFetchError={studentsFetchError}/>
+                <StudentList fetchStudents={fetchStudents} students={students} loading={studentsLoading} error={studentsFetchError}/>
             </div>
 
             {/* Action Buttons  */}

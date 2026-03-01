@@ -93,6 +93,7 @@ export default function SignupContainer() {
           setValue={setValue}
           handleSubmit={handleSubmit(onSubmit)}
           submitting={submitting}
+          submitError={submitError}
         />
       </div>
     </div>

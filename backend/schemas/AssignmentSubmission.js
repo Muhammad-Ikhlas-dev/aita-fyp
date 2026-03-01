@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 
+const aiGradeSchema = new mongoose.Schema(
+  {
+    score: { type: Number, default: null },
+    feedback: { type: String, default: null },
+  },
+  { _id: false }
+);
+
 const assignmentSubmissionSchema = new mongoose.Schema(
   {
     assignmentId: {
@@ -31,6 +39,15 @@ const assignmentSubmissionSchema = new mongoose.Schema(
     submittedAt: {
       type: Date,
       default: Date.now,
+    },
+    gradingStatus: {
+      type: String,
+      enum: ['pending', 'graded', 'failed'],
+      default: 'pending',
+    },
+    aiGrade: {
+      type: aiGradeSchema,
+      default: () => ({ score: null, feedback: null }),
     },
   },
   {
