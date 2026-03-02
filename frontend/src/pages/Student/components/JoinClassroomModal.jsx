@@ -34,6 +34,8 @@ const JoinClassroomModal = ({ isOpen, onClose, onJoinSuccess }) => {
   const [searchStatus, setSearchStatus] = useState('idle'); // 'idle' | 'searching' | 'found' | 'error' | 'joining' | 'joined'
   const [foundClass, setFoundClass] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -42,9 +44,31 @@ const JoinClassroomModal = ({ isOpen, onClose, onJoinSuccess }) => {
         setSearchStatus('idle');
         setFoundClass(null);
         setErrorMessage('');
+        setPhotoFile(null);
+        setPhotoPreview(null);
       }, 300);
     }
   }, [isOpen]);
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Please select an image file (e.g. JPG, PNG).');
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      return;
+    }
+    setErrorMessage('');
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
 
   const handleLookup = async (e) => {
     e.preventDefault();
@@ -87,6 +111,10 @@ const JoinClassroomModal = ({ isOpen, onClose, onJoinSuccess }) => {
       setErrorMessage('You must be logged in as a student to join.');
       return;
     }
+    if (!photoFile) {
+      setErrorMessage('Please upload your photo first. It will be used for attendance in this class.');
+      return;
+    }
 
     setSearchStatus('joining');
     setErrorMessage('');
@@ -106,6 +134,23 @@ const JoinClassroomModal = ({ isOpen, onClose, onJoinSuccess }) => {
         setSearchStatus('found');
         return;
       }
+
+      // Upload photo so it appears on teacher's Mark Attendance for this class (same as JoinClass page)
+      const formData = new FormData();
+      formData.append('image', photoFile);
+      const name = (user.fullName || user.email || 'Student').trim();
+      const uploadUrl = `${API_BASE}/upload?name=${encodeURIComponent(name)}&classId=${encodeURIComponent(foundClass.classId)}`;
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData,
+      });
+      const uploadResult = await uploadRes.json();
+      if (!uploadRes.ok || !uploadResult.success) {
+        setErrorMessage(uploadResult.message || 'Photo upload failed. Please try again.');
+        setSearchStatus('found');
+        return;
+      }
+
       setSearchStatus('joined');
       setTimeout(() => {
         onClose();
@@ -183,14 +228,42 @@ const JoinClassroomModal = ({ isOpen, onClose, onJoinSuccess }) => {
               </form>
 
               {searchStatus === 'found' && foundClass && (
-                <div className="bg-gradient-to-br from-cyan-900/20 to-purple-900/20 border border-white/10 rounded-xl p-4">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white shrink-0">
-                      <School size={24} />
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-br from-cyan-900/20 to-purple-900/20 border border-white/10 rounded-xl p-4">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white shrink-0">
+                        <School size={24} />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-white text-lg leading-tight">{foundClass.title}</h4>
+                        <p className="text-sm text-gray-400 mt-1">Upload your photo for attendance, then click Join class.</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h4 className="font-bold text-white text-lg leading-tight">{foundClass.title}</h4>
-                      <p className="text-sm text-gray-400 mt-1">Click &quot;Join class&quot; to enroll. No photo required from here.</p>
+                  </div>
+
+                  {errorMessage && (
+                    <p className="text-red-400 text-sm">{errorMessage}</p>
+                  )}
+
+                  {/* Photo for attendance (required, same as JoinClass page) */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Your photo for attendance (required)</label>
+                    <p className="text-xs text-gray-500 mb-2">This photo will appear on the teacher’s Mark Attendance page for this class.</p>
+                    <div className="flex flex-col items-center gap-2">
+                      <label className="w-full flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/20 hover:border-cyan-500/50 bg-[#0d0620] p-6 cursor-pointer transition">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoChange}
+                          className="hidden"
+                        />
+                        {photoPreview ? (
+                          <img src={photoPreview} alt="Preview" className="w-24 h-24 rounded-full object-cover border-2 border-white/20" />
+                        ) : (
+                          <span className="text-4xl mb-2">📷</span>
+                        )}
+                        <span className="text-sm text-gray-400">{photoFile ? photoFile.name : 'Choose a photo'}</span>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -212,8 +285,9 @@ const JoinClassroomModal = ({ isOpen, onClose, onJoinSuccess }) => {
               <button
                 type="button"
                 onClick={handleJoin}
-                disabled={searchStatus === 'joining'}
-                className="px-6 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg font-bold shadow-lg shadow-cyan-900/20 transition-all active:scale-95 disabled:opacity-70"
+                disabled={searchStatus === 'joining' || !photoFile}
+                className="px-6 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg font-bold shadow-lg shadow-cyan-900/20 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                title={!photoFile ? 'Upload your photo first' : ''}
               >
                 {searchStatus === 'joining' ? 'Joining…' : 'Join class'}
               </button>

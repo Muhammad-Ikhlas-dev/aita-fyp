@@ -1,13 +1,16 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const mongoose = require('mongoose');
 const Class = require('../schemas/Class');
 const Enrollment = require('../schemas/Enrollment');
 const Student = require('../schemas/Student');
+const LabeledImage = require('../schemas/LabeledImage');
 
 const router = express.Router();
 const classCoversDir = path.join(__dirname, '..', 'class_covers');
+const labeledImagesDir = path.join(__dirname, '..', 'labeled_images');
 
 const ALPHANUM = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function randomCode(len = 8) {
@@ -266,7 +269,7 @@ router.post('/:classId/students', async (req, res) => {
   }
 });
 
-// DELETE /api/classes/:classId/students/:studentId — remove a student from a class (delete Enrollment)
+// DELETE /api/classes/:classId/students/:studentId — remove a student from a class (delete Enrollment + labeled images for that student in this class)
 router.delete('/:classId/students/:studentId', async (req, res) => {
   try {
     const { classId, studentId } = req.params;
@@ -277,6 +280,30 @@ router.delete('/:classId/students/:studentId', async (req, res) => {
         message: 'Enrollment not found'
       });
     }
+
+    // Remove the student's photo(s) from labeled_images for this class (attendance)
+    const student = await Student.findById(studentId).select('fullName email').lean();
+    if (student) {
+      const nameTrimmed = student.fullName?.trim();
+      const labelsToMatch = [nameTrimmed, student.email?.trim()].filter(Boolean);
+      if (nameTrimmed) labelsToMatch.push(nameTrimmed.replace(/\s+/g, '_'));
+      const images = await LabeledImage.find({
+        classId: new mongoose.Types.ObjectId(classId),
+        label: { $in: labelsToMatch }
+      }).lean();
+      for (const img of images) {
+        const filePath = path.join(labeledImagesDir, img.filename);
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+          } catch (err) {
+            console.error('Could not delete labeled image file:', img.filename, err.message);
+          }
+        }
+        await LabeledImage.deleteOne({ _id: img._id });
+      }
+    }
+
     res.json({
       success: true,
       message: 'Student removed from class'

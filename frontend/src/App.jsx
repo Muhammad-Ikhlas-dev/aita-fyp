@@ -3,6 +3,7 @@ import { Routes, Route, useLocation } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import ShimmerLoader from "./components/ShimmerLoader";
 import Navbar from "./components/Navbar";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 // Lazy load pages (existing)
 const Home = lazy(() => import("./pages/Home"));
@@ -45,10 +46,10 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/signin" element={<Signin />} />
         <Route path="/pricing" element={<Pricing />} />
-        <Route path="/join/:code" element={<JoinClass />} />
+        <Route path="/join/:code" element={<ProtectedRoute allowedRoles={["student"]}><JoinClass /></ProtectedRoute>} />
 
         {/* Student Routes */}
-        <Route path="/student" element={<StudentLayout />}>
+        <Route path="/student" element={<ProtectedRoute allowedRoles={["student"]}><StudentLayout /></ProtectedRoute>}>
           <Route path="dashboard" element={<StudentDashboard />} />
           <Route path="classes/:classId" element={<StudentClassDetail />} />
           <Route path="assignment" element={<StudentAssignment />} />
@@ -57,7 +58,7 @@ function App() {
         </Route>
 
         {/* Teacher Routes */}
-        <Route path="/teacher" element={<TeacherLayout />}>
+        <Route path="/teacher" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherLayout /></ProtectedRoute>}>
           <Route path="attendance" element={<AttendancePortal />} />
           <Route path="dashboard" element={<TeacherDashboard />} />
           <Route path="create-class" element={<CreateClass />} />

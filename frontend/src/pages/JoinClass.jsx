@@ -6,7 +6,7 @@ const API_BASE = "http://localhost:5000/api";
 export default function JoinClass() {
   const { code } = useParams();
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
   const [classInfo, setClassInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -15,26 +15,11 @@ export default function JoinClass() {
   const [photoPreview, setPhotoPreview] = useState(null);
 
   useEffect(() => {
-    const raw = localStorage.getItem("user");
-    const u = raw ? JSON.parse(raw) : null;
-    setUser(u);
-
-    if (!u) {
-      setLoading(false);
-      return;
-    }
-
-    if (u.role !== "student") {
-      setLoading(false);
-      return;
-    }
-
     if (!code || !code.trim()) {
       setError("Invalid join link.");
       setLoading(false);
       return;
     }
-
     let cancelled = false;
     (async () => {
       try {
@@ -57,13 +42,6 @@ export default function JoinClass() {
     })();
     return () => { cancelled = true; };
   }, [code]);
-
-  // Not logged in → redirect to signin with return URL
-  useEffect(() => {
-    if (loading || user) return;
-    const redirect = `/join/${code || ""}`;
-    navigate(`/signin?redirect=${encodeURIComponent(redirect)}`, { replace: true });
-  }, [loading, user, navigate, code]);
 
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
@@ -140,21 +118,6 @@ export default function JoinClass() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#0a001a] via-[#1a0033] to-[#0f0020] flex items-center justify-center text-white">
         <p>Loading…</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  if (user.role !== "student") {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-[#0a001a] via-[#1a0033] to-[#0f0020] flex items-center justify-center text-white p-4">
-        <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8 max-w-md text-center">
-          <p className="text-slate-300 mb-4">Only students can join a class with this link.</p>
-          <Link to="/" className="text-[#9B37FF] hover:underline">Go to home</Link>
-        </div>
       </div>
     );
   }
