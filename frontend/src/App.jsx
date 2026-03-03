@@ -18,6 +18,7 @@ const StudentClassDetail = lazy(() => import("./pages/Student/StudentClassDetail
 const StudentAssignment = lazy(() => import("./pages/Student/StudentAssignment"));
 const StudentResult = lazy(() => import("./pages/Student/StudentResult"));
 const StudentSetting = lazy(() => import("./pages/Student/StudentSetting"));
+const TakeQuiz = lazy(() => import("./pages/Student/TakeQuiz"))
 
 // Teacher pages (new)
 const AttendancePortal = lazy(() => import("./pages/Teacher/AttendancePortal"));
@@ -52,6 +53,7 @@ function App() {
         <Route path="/student" element={<ProtectedRoute allowedRoles={["student"]}><StudentLayout /></ProtectedRoute>}>
           <Route path="dashboard" element={<StudentDashboard />} />
           <Route path="classes/:classId" element={<StudentClassDetail />} />
+          <Route path="/student/quiz/:quizId" element={<TakeQuiz />} />
           <Route path="assignment" element={<StudentAssignment />} />
           <Route path="result" element={<StudentResult />} />
           <Route path="settings" element={<StudentSetting />} />

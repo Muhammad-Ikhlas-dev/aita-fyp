@@ -9,6 +9,7 @@ const aiRoutes = require('./ai.routes');
 const assignmentsRoutes = require('./assignments.routes');
 const submissionsRoutes = require('./submissions.routes');
 const plagiarismRoutes = require('./plagiarism.routes');
+const quizRoutes = require('./quiz.routes');
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.use('/health', healthRoutes);
 router.use('/auth', authRoutes);
 router.use('/classes', classesRoutes);
 router.use('/ai', aiRoutes);
+router.use('/quizzes', quizRoutes)
 
 module.exports = router;

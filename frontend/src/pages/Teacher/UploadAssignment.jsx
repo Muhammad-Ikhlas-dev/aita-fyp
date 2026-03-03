@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FolderInput, FileText, X, Eye, Sparkles, Download } from "lucide-react";
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = "http://localhost:5001";
 
 const UploadAssignment = () => {
   const [form, setForm] = useState({ title: "", instructions: "", deadline: "" });

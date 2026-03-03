@@ -18,11 +18,11 @@ import { Link } from "react-router-dom";
 
 // Schema
 const schema = z.object({
-  email: z.string().email("Invalid email"),
+  email: z.email("Invalid email"),
   password: z.string().min(6, "Minimum 6 characters"),
 });
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "http://localhost:5001/api";
 
 export default function LoginContainer() {
   const navigate = useNavigate();

@@ -3,7 +3,7 @@ import ClassroomGrid from './components/ClassroomGrid';
 import AssignmentList from './components/AssignmentList';
 import StatsWidget from './components/StatsWidget';
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = "http://localhost:5001";
 
 const GRADIENTS = [
   "from-purple-600 to-blue-600",
