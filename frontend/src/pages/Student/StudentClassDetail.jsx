@@ -14,7 +14,7 @@ import {
   PlayCircle
 } from "lucide-react";
 
-const API_BASE = "http://localhost:5001";
+const API_BASE = "http://localhost:5000";
 
 function formatDateDMY(date) {
   if (!date) return "—";

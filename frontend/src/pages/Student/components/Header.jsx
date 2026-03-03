@@ -1,7 +1,13 @@
+import { useState, useEffect } from "react";
 import { Search, User, Menu, X } from "lucide-react";
 
 const Header = ({ sidebarOpen, toggleSidebar }) => {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "{}"));
+  useEffect(() => {
+    const onUserUpdated = () => setUser(JSON.parse(localStorage.getItem("user") || "{}"));
+    window.addEventListener("userUpdated", onUserUpdated);
+    return () => window.removeEventListener("userUpdated", onUserUpdated);
+  }, []);
 
   return (
     <header className="h-20 border-b border-white/5 flex items-center justify-between px-6 md:px-8 bg-[#0d0620]/80 backdrop-blur-sm z-10 relative">

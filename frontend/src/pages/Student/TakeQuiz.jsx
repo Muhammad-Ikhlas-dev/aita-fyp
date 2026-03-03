@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Clock, Send, AlertCircle, CheckCircle, Brain, ChevronRight } from "lucide-react";
 
-const API_BASE = "http://localhost:5001";
+const API_BASE = "http://localhost:5000";
 
 const TakeQuiz = () => {
   const { quizId } = useParams();

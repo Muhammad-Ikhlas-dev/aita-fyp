@@ -12,7 +12,7 @@ import {
   AlertCircle
 } from "lucide-react";
 
-const API_BASE = "http://localhost:5001";
+const API_BASE = "http://localhost:5000";
 
 const UploadQuiz = () => {
   const [classes, setClasses] = useState([]);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, HelpCircle } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5001';
+const API_BASE = 'http://localhost:5000';
 
 const StatsWidget = ({ studentId }) => {
   const [stats, setStats] = useState({

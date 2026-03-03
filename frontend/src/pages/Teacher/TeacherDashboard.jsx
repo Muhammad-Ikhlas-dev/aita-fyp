@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import TeacherCard from "./components/TeacherCard";
 import { Link } from "react-router-dom";
 
-const API_BASE = "http://localhost:5001";
+const API_BASE = "http://localhost:5000";
 
 function formatScheduleTime(timeStr) {
   if (!timeStr || !timeStr.trim()) return "";

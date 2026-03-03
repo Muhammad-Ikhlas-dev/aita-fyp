@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const LabeledImage = require('../schemas/LabeledImage');
 const Enrollment = require('../schemas/Enrollment');
@@ -8,9 +9,70 @@ const Assignment = require('../schemas/Assignment');
 const Quiz = require('../schemas/Quiz');
 const AssignmentSubmission = require('../schemas/AssignmentSubmission');
 const QuizSubmission = require('../schemas/QuizSubmission');
+const Student = require('../schemas/Student');
 
 const router = express.Router();
 const uploadDir = path.join(__dirname, '..', 'labeled_images');
+
+// PATCH /api/students/me — update profile (fullName). Body: studentId, fullName.
+router.patch('/me', async (req, res) => {
+  try {
+    const { studentId, fullName } = req.body;
+    if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({ success: false, message: 'Valid studentId is required' });
+    }
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+    if (fullName != null && typeof fullName === 'string') {
+      student.fullName = fullName.trim();
+    }
+    await student.save();
+    const user = {
+      id: student._id.toString(),
+      fullName: student.fullName,
+      email: student.email,
+      rollNo: student.rollNo,
+      role: 'student',
+      photo: student.photo || null,
+    };
+    res.json({ success: true, message: 'Profile updated successfully', user });
+  } catch (error) {
+    console.error('Update student profile error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to update profile' });
+  }
+});
+
+// PATCH /api/students/me/password — change password. Body: studentId, currentPassword, newPassword (no confirm).
+router.patch('/me/password', async (req, res) => {
+  try {
+    const { studentId, currentPassword, newPassword } = req.body;
+    if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({ success: false, message: 'Valid studentId is required' });
+    }
+    if (!currentPassword || typeof currentPassword !== 'string') {
+      return res.status(400).json({ success: false, message: 'Current password is required' });
+    }
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters' });
+    }
+    const student = await Student.findById(studentId).select('+password');
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+    const match = await bcrypt.compare(currentPassword, student.password);
+    if (!match) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+    }
+    student.password = await bcrypt.hash(newPassword, 10);
+    await student.save();
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Change student password error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to update password' });
+  }
+});
 
 // GET /api/students/academic-stats?studentId= — total/missed assignments and quizzes across all enrolled classes
 router.get('/academic-stats', async (req, res) => {

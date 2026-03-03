@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Search } from "lucide-react";
 
-const API_BASE = "http://localhost:5001";
+const API_BASE = "http://localhost:5000";
 
 const TeacherHeader = ({ toggleSidebar }) => {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "{}"));

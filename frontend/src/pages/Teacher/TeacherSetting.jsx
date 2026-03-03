@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { User, Lock, Bell, Shield, Save, Upload } from "lucide-react";
 
-const API_BASE = "http://localhost:5001";
+const API_BASE = "http://localhost:5000";
 
 const TeacherSettings = () => {
   const [activeTab, setActiveTab] = useState("profile");
@@ -13,6 +13,12 @@ const TeacherSettings = () => {
   const [message, setMessage] = useState(null);
   const photoInputRef = useRef(null);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState(null);
 
   useEffect(() => {
     setFullName(user.fullName || "");
@@ -63,6 +69,53 @@ const TeacherSettings = () => {
     }
   };
 
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setPasswordMessage(null);
+    if (!user.id) {
+      setPasswordMessage({ type: "error", text: "Not logged in." });
+      return;
+    }
+    if (!currentPassword.trim()) {
+      setPasswordMessage({ type: "error", text: "Enter your current password." });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordMessage({ type: "error", text: "New password must be at least 6 characters." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage({ type: "error", text: "New password and confirmation do not match." });
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/teachers/me/password`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teacherId: user.id,
+          currentPassword: currentPassword.trim(),
+          newPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPasswordMessage({ type: "error", text: data.message || "Failed to update password." });
+        setPasswordLoading(false);
+        return;
+      }
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordMessage({ type: "success", text: data.message || "Password updated successfully." });
+    } catch (err) {
+      setPasswordMessage({ type: "error", text: "Network error. Please try again." });
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   const tabButton = (id, label, icon) => (
     <button
       onClick={() => setActiveTab(id)}
@@ -90,8 +143,8 @@ const TeacherSettings = () => {
           <div className="flex flex-col gap-3">
             {tabButton("profile", "Profile", <User size={18} />)}
             {tabButton("security", "Security", <Lock size={18} />)}
-            {tabButton("notifications", "Notifications", <Bell size={18} />)}
-            {tabButton("privacy", "Privacy", <Shield size={18} />)}
+            {/* {tabButton("notifications", "Notifications", <Bell size={18} />)}
+            {tabButton("privacy", "Privacy", <Shield size={18} />)} */}
           </div>
         </div>
 
@@ -174,14 +227,30 @@ const TeacherSettings = () => {
 
           {/* SECURITY TAB */}
           {activeTab === "security" && (
-            <div className="space-y-6">
+            <form onSubmit={handleUpdatePassword} className="space-y-6">
               <h2 className="text-xl font-semibold">Security Settings</h2>
+
+              {passwordMessage && (
+                <p
+                  className={`text-sm px-3 py-2 rounded-lg ${
+                    passwordMessage.type === "success"
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "bg-red-500/20 text-red-400"
+                  }`}
+                >
+                  {passwordMessage.text}
+                </p>
+              )}
 
               <div>
                 <label className="text-sm text-gray-300">Current Password</label>
                 <input
                   type="password"
-                  className="w-full px-4 py-2 rounded-lg bg-[#1b1338] border border-white/10"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-[#1b1338] border border-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  placeholder="Enter current password"
+                  autoComplete="current-password"
                 />
               </div>
 
@@ -190,26 +259,35 @@ const TeacherSettings = () => {
                   <label className="text-sm text-gray-300">New Password</label>
                   <input
                     type="password"
-                    className="w-full px-4 py-2 rounded-lg bg-[#1b1338] border border-white/10"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-2 rounded-lg bg-[#1b1338] border border-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                    placeholder="At least 6 characters"
+                    autoComplete="new-password"
                   />
                 </div>
-
                 <div>
-                  <label className="text-sm text-gray-300">
-                    Confirm New Password
-                  </label>
+                  <label className="text-sm text-gray-300">Confirm New Password</label>
                   <input
                     type="password"
-                    className="w-full px-4 py-2 rounded-lg bg-[#1b1338] border border-white/10"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-2 rounded-lg bg-[#1b1338] border border-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                    placeholder="Re-enter new password"
+                    autoComplete="new-password"
                   />
                 </div>
               </div>
 
-              <button className="px-6 py-3 bg-cyan-600 rounded-xl hover:bg-cyan-700 transition flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={passwordLoading}
+                className="px-6 py-3 bg-cyan-600 rounded-xl hover:bg-cyan-700 transition flex items-center gap-2 disabled:opacity-50"
+              >
                 <Save size={18} />
-                Update Password
+                {passwordLoading ? "Updating…" : "Update Password"}
               </button>
-            </div>
+            </form>
           )}
 
           {/* NOTIFICATIONS TAB */}

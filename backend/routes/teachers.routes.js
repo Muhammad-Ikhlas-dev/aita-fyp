@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const Teacher = require('../schemas/Teacher');
 
@@ -89,6 +90,43 @@ router.patch('/me', upload.single('photo'), async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update profile',
+    });
+  }
+});
+
+// PATCH /api/teachers/me/password — change password (currentPassword, newPassword). Body: teacherId, currentPassword, newPassword.
+router.patch('/me/password', async (req, res) => {
+  try {
+    const { teacherId, currentPassword, newPassword } = req.body;
+    if (!teacherId || !mongoose.Types.ObjectId.isValid(teacherId)) {
+      return res.status(400).json({ success: false, message: 'Valid teacherId is required' });
+    }
+    if (!currentPassword || typeof currentPassword !== 'string') {
+      return res.status(400).json({ success: false, message: 'Current password is required' });
+    }
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters' });
+    }
+
+    const teacher = await Teacher.findById(teacherId).select('+password');
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Teacher not found' });
+    }
+
+    const match = await bcrypt.compare(currentPassword, teacher.password);
+    if (!match) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    teacher.password = await bcrypt.hash(newPassword, 10);
+    await teacher.save();
+
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update password',
     });
   }
 });

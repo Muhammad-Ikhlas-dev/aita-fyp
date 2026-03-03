@@ -22,7 +22,7 @@ const schema = z.object({
   password: z.string().min(6, "Minimum 6 characters"),
 });
 
-const API_BASE = "http://localhost:5001/api";
+const API_BASE = "http://localhost:5000/api";
 
 export default function LoginContainer() {
   const navigate = useNavigate();

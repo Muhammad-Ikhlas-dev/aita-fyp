@@ -78,7 +78,7 @@ const CreateClass = () => {
       }
       // API: POST /api/classes — create class with optional cover and schedule slots
       // API: POST /api/classes — create class with optional cover and schedule slots
-      const res = await fetch("http://localhost:5001/api/classes", {
+      const res = await fetch("http://localhost:5000/api/classes", {
         method: "POST",
         body: formData,
       });
