@@ -16,10 +16,8 @@ const Sidebar = ({ onClose }) => {
 
   // Nav items array
   const navItems = [
-    { label: "My Classes", icon: <BookOpen size={20} />, to: "/student/dashboard" },
-    { label: "Assignments", icon: <FileText size={20} />, to: "/student/assignment" },
-    { label: "Results", icon: <Calendar size={20} />, to: "/student/result" },
-  ];
+    { label: "My Classes", icon: <BookOpen size={20} />, to: "/student/dashboard" }
+  ]
 
   return (
     <aside className="w-64 bg-[#150a2e]/50 backdrop-blur-xl border-r border-white/5 flex flex-col justify-between h-full relative z-50">
@@ -66,7 +64,7 @@ const Sidebar = ({ onClose }) => {
         {/* Logout Button */}
         <button
           onClick={() => {
-            localStorage.removeItem("user");
+            localStorage.clear();
             navigate("/", { replace: true });
           }}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-400 hover:bg-white/5 hover:text-white"

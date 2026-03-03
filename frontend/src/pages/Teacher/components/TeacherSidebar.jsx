@@ -24,7 +24,7 @@ const TeacherSidebar = ({ onClose, mobile = false }) => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    localStorage.removeItem("user");
+    localStorage.clear();
     if (mobile && onClose) onClose();
     navigate("/", { replace: true });
   };

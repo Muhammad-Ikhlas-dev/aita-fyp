@@ -10,10 +10,12 @@ const assignmentsRoutes = require('./assignments.routes');
 const submissionsRoutes = require('./submissions.routes');
 const plagiarismRoutes = require('./plagiarism.routes');
 const quizRoutes = require('./quiz.routes');
+const teachersRoutes = require('./teachers.routes');
 
 const router = express.Router();
 
 router.use('/upload', uploadRoutes);
+router.use('/teachers', teachersRoutes);
 router.use('/assignments', assignmentsRoutes);
 router.use('/submissions', submissionsRoutes);
 router.use('/plagiarism', plagiarismRoutes);

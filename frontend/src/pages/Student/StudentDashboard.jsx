@@ -18,6 +18,8 @@ const StudentDashboard = () => {
   const [classes, setClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(true);
   const [classesError, setClassesError] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   const fetchEnrolledClasses = useCallback(async () => {
@@ -62,6 +64,36 @@ const StudentDashboard = () => {
     fetchEnrolledClasses();
   }, [fetchEnrolledClasses]);
 
+  // Fetch assignments from all enrolled classes, merge and sort by deadline (nearest first)
+  useEffect(() => {
+    if (!classes.length) {
+      setAssignments([]);
+      return;
+    }
+    setAssignmentsLoading(true);
+    const classIds = classes.map((c) => c.id).filter(Boolean);
+    Promise.all(
+      classIds.map((classId) =>
+        fetch(`${API_BASE}/api/assignments?classId=${encodeURIComponent(classId)}`).then((r) => r.json())
+      )
+    )
+      .then((results) => {
+        const byId = new Map();
+        results.forEach((data) => {
+          (data.assignments || []).forEach((a) => {
+            if (a._id && !byId.has(a._id)) byId.set(a._id, a);
+          });
+        });
+        const now = new Date();
+        const list = Array.from(byId.values())
+          .filter((a) => a.deadline && new Date(a.deadline) >= now)
+          .sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+        setAssignments(list);
+      })
+      .catch(() => setAssignments([]))
+      .finally(() => setAssignmentsLoading(false));
+  }, [classes]);
+
   return (
     <div className="flex h-screen bg-[#0d0620] overflow-hidden font-sans text-white">
       <main className="flex-1 flex flex-col overflow-hidden relative">
@@ -77,8 +109,12 @@ const StudentDashboard = () => {
             onJoinSuccess={fetchEnrolledClasses}
           />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <AssignmentList />
-            <StatsWidget />
+            <AssignmentList
+              assignments={assignments}
+              classes={classes}
+              loading={assignmentsLoading}
+            />
+            <StatsWidget studentId={user.id} />
           </div>
         </div>
       </main>

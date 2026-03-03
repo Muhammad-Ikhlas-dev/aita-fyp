@@ -27,6 +27,12 @@ if (!fs.existsSync(classCoversDir)) {
 }
 app.use('/class_covers', express.static(classCoversDir));
 
+const teacherProfilesDir = path.join(__dirname, 'teacher_profiles');
+if (!fs.existsSync(teacherProfilesDir)) {
+    fs.mkdirSync(teacherProfilesDir, { recursive: true });
+}
+app.use('/teacher_profiles', express.static(teacherProfilesDir));
+
 // Connect to MongoDB, then mount routes and start listening
 connectDB()
   .then(() => {

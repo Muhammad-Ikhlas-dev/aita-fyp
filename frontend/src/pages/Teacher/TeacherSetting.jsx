@@ -1,8 +1,67 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { User, Lock, Bell, Shield, Save, Upload } from "lucide-react";
+
+const API_BASE = "http://localhost:5001";
 
 const TeacherSettings = () => {
   const [activeTab, setActiveTab] = useState("profile");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [message, setMessage] = useState(null);
+  const photoInputRef = useRef(null);
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+  useEffect(() => {
+    setFullName(user.fullName || "");
+    setEmail(user.email || "");
+    setPhotoPreview(user.photo ? `${API_BASE}${user.photo}` : null);
+  }, [user.fullName, user.email, user.photo]);
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    if (!user.id) {
+      setMessage({ type: "error", text: "Not logged in." });
+      return;
+    }
+    setSaveLoading(true);
+    setMessage(null);
+    try {
+      const formData = new FormData();
+      formData.append("teacherId", user.id);
+      formData.append("fullName", fullName.trim());
+      formData.append("email", email.trim().toLowerCase());
+      if (photoFile) formData.append("photo", photoFile);
+      const res = await fetch(`${API_BASE}/api/teachers/me`, {
+        method: "PATCH",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage({ type: "error", text: data.message || "Failed to update profile." });
+        setSaveLoading(false);
+        return;
+      }
+      localStorage.setItem("user", JSON.stringify(data.user));
+      window.dispatchEvent(new CustomEvent("userUpdated"));
+      setPhotoFile(null);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      setMessage({ type: "success", text: data.message || "Profile updated." });
+    } catch (err) {
+      setMessage({ type: "error", text: "Network error. Please try again." });
+    } finally {
+      setSaveLoading(false);
+    }
+  };
 
   const tabButton = (id, label, icon) => (
     <button
@@ -41,18 +100,38 @@ const TeacherSettings = () => {
 
           {/* PROFILE TAB */}
           {activeTab === "profile" && (
-            <div className="space-y-6">
-
+            <form onSubmit={handleSaveProfile} className="space-y-6">
               <h2 className="text-xl font-semibold">Profile Information</h2>
+
+              {message && (
+                <p
+                  className={`text-sm px-3 py-2 rounded-lg ${
+                    message.type === "success" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
+                  }`}
+                >
+                  {message.text}
+                </p>
+              )}
 
               {/* Avatar Upload */}
               <div className="flex items-center gap-4">
                 <img
-                  src="https://via.placeholder.com/80"
+                  src={photoPreview || "https://via.placeholder.com/80"}
                   alt="profile"
-                  className="w-20 h-20 rounded-full border border-cyan-500/20"
+                  className="w-20 h-20 rounded-full border border-cyan-500/20 object-cover"
                 />
-                <button className="px-4 py-2 bg-cyan-600 rounded-lg hover:bg-cyan-700 transition flex items-center gap-2">
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="px-4 py-2 bg-cyan-600 rounded-lg hover:bg-cyan-700 transition flex items-center gap-2"
+                >
                   <Upload size={16} />
                   Change Avatar
                 </button>
@@ -63,6 +142,8 @@ const TeacherSettings = () => {
                   <label className="text-sm text-gray-300">Full Name</label>
                   <input
                     type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
                     className="w-full px-4 py-2 rounded-lg bg-[#1b1338] border border-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                     placeholder="Enter your name"
                   />
@@ -72,17 +153,23 @@ const TeacherSettings = () => {
                   <label className="text-sm text-gray-300">Email Address</label>
                   <input
                     type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-4 py-2 rounded-lg bg-[#1b1338] border border-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                     placeholder="yourname@email.com"
                   />
                 </div>
               </div>
 
-              <button className="px-6 py-3 bg-cyan-600 rounded-xl hover:bg-cyan-700 transition flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={saveLoading}
+                className="px-6 py-3 bg-cyan-600 rounded-xl hover:bg-cyan-700 transition flex items-center gap-2 disabled:opacity-50"
+              >
                 <Save size={18} />
-                Save Changes
+                {saveLoading ? "Saving…" : "Save Changes"}
               </button>
-            </div>
+            </form>
           )}
 
           {/* SECURITY TAB */}

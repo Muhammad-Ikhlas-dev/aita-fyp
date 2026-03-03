@@ -134,6 +134,7 @@ router.post('/login', async (req, res) => {
           message: 'Invalid email or password'
         });
       }
+      const teacherObj = teacher.toObject ? teacher.toObject() : teacher;
       return res.json({
         success: true,
         message: 'Login successful',
@@ -141,7 +142,8 @@ router.post('/login', async (req, res) => {
           id: teacher._id,
           fullName: teacher.fullName,
           email: teacher.email,
-          role: 'teacher'
+          role: 'teacher',
+          photo: teacherObj.photo || null
         }
       });
     }
