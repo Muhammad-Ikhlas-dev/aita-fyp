@@ -149,12 +149,28 @@ const StudentClassDetail = () => {
         <ArrowLeft size={18} /> Back to My Classes
       </Link>
 
-      <div className="mb-10">
-        <h1 className="text-4xl font-bold text-white mb-2">{classInfo?.title}</h1>
-        <p className="text-slate-400 flex items-center gap-2">
-           <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-xs font-bold uppercase tracking-widest">Subject</span>
-           {classInfo?.subject || "General"}
-        </p>
+      {/* Class cover + title */}
+      <div className="bg-[#0f0b1a] border border-[#1f1830] rounded-xl overflow-hidden mb-8">
+        {classInfo?.cover ? (
+          <div className="aspect-[3/1] w-full bg-[#1f1830] min-h-[140px]">
+            <img
+              src={`${API_BASE}${classInfo.cover}`}
+              alt={classInfo.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        ) : (
+          <div className="aspect-[3/1] w-full max-h-40 bg-[#1f1830] flex items-center justify-center text-slate-500">
+            No cover
+          </div>
+        )}
+        <div className="p-4">
+          <h1 className="text-4xl font-bold text-white mb-2">{classInfo?.title}</h1>
+          <p className="text-slate-400 flex items-center gap-2">
+             <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-xs font-bold uppercase tracking-widest">Subject</span>
+             {classInfo?.subject || "General"}
+          </p>
+        </div>
       </div>
 
       {/* TABS NAVIGATION */}

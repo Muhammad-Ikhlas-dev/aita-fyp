@@ -12,17 +12,24 @@ const CreateClass = () => {
     schedule: "",
   });
   const [scheduleSlots, setScheduleSlots] = useState([{ day: "", time: "" }]);
+  const [fieldErrors, setFieldErrors] = useState({ title: "", subject: "", slots: "" });
 
   const coverInputRef = useRef(null);
 
-  // Event: sync form fields (title, subject, description, schedule)
-  const handleChange = (e) => setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
+  // Event: sync form fields (title, subject, description, schedule); clear field error when user types
+  const handleChange = (e) => {
+    const name = e.target.name;
+    setForm((s) => ({ ...s, [name]: e.target.value }));
+    if (name === "title") setFieldErrors((prev) => ({ ...prev, title: "" }));
+    if (name === "subject") setFieldErrors((prev) => ({ ...prev, subject: "" }));
+  };
 
-  // Event: update a single schedule slot's day or time
+  // Event: update a single schedule slot's day or time; clear slots error when user edits
   const updateSlot = (index, field, value) => {
     setScheduleSlots((prev) =>
       prev.map((slot, i) => (i === index ? { ...slot, [field]: value } : slot))
     );
+    setFieldErrors((prev) => ({ ...prev, slots: "" }));
   };
 
   // Event: add another day/time slot
@@ -37,9 +44,21 @@ const CreateClass = () => {
   const [error, setError] = useState(null);
   const [createdJoinLink, setCreatedJoinLink] = useState(null);
 
+  // Validate: title, subject required; at least one slot with both day and time
+  const validate = () => {
+    const err = { title: "", subject: "", slots: "" };
+    if (!form.title?.trim()) err.title = "Class title is required.";
+    if (!form.subject?.trim()) err.subject = "Subject is required.";
+    const hasValidSlot = scheduleSlots.some((s) => s.day?.trim() && s.time?.trim());
+    if (!hasValidSlot) err.slots = "At least one schedule slot with day and time is required.";
+    setFieldErrors(err);
+    return !err.title && !err.subject && !err.slots;
+  };
+
   // Event: submit create-class form — POST /api/classes with FormData (title, subject, description, scheduleSlots, cover, createdBy)
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validate()) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -59,7 +78,7 @@ const CreateClass = () => {
       }
       // API: POST /api/classes — create class with optional cover and schedule slots
       // API: POST /api/classes — create class with optional cover and schedule slots
-      const res = await fetch("http://localhost:5000/api/classes", {
+      const res = await fetch("http://localhost:5001/api/classes", {
         method: "POST",
         body: formData,
       });
@@ -126,13 +145,25 @@ const CreateClass = () => {
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="text-sm text-slate-300">Class Title</label>
-          <input name="title" value={form.title} onChange={handleChange} className="w-full mt-2 p-3 rounded-lg bg-[#0b0713] border border-[#1f1830]" />
+          <label className="text-sm text-slate-300">Class Title <span className="text-red-400">*</span></label>
+          <input
+            name="title"
+            value={form.title}
+            onChange={handleChange}
+            className={`w-full mt-2 p-3 rounded-lg bg-[#0b0713] border ${fieldErrors.title ? "border-red-500" : "border-[#1f1830]"}`}
+          />
+          {fieldErrors.title && <p className="mt-1 text-sm text-red-400">{fieldErrors.title}</p>}
         </div>
 
         <div>
-          <label className="text-sm text-slate-300">Subject</label>
-          <input name="subject" value={form.subject} onChange={handleChange} className="w-full mt-2 p-3 rounded-lg bg-[#0b0713] border border-[#1f1830]" />
+          <label className="text-sm text-slate-300">Subject <span className="text-red-400">*</span></label>
+          <input
+            name="subject"
+            value={form.subject}
+            onChange={handleChange}
+            className={`w-full mt-2 p-3 rounded-lg bg-[#0b0713] border ${fieldErrors.subject ? "border-red-500" : "border-[#1f1830]"}`}
+          />
+          {fieldErrors.subject && <p className="mt-1 text-sm text-red-400">{fieldErrors.subject}</p>}
         </div>
 
         <div>
@@ -153,7 +184,7 @@ const CreateClass = () => {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-sm text-slate-300">Schedule (day & time) — add multiple if class runs on several days/times</label>
+            <label className="text-sm text-slate-300">Schedule (day & time) — add multiple if class runs on several days/times <span className="text-red-400">*</span></label>
             <button
               type="button"
               onClick={addSlot}
@@ -165,7 +196,10 @@ const CreateClass = () => {
           </div>
           <div className="space-y-3">
             {scheduleSlots.map((slot, index) => (
-              <div key={index} className="flex flex-wrap items-end gap-3 p-3 rounded-lg bg-[#0b0713] border border-[#1f1830]">
+              <div
+                key={index}
+                className={`flex flex-wrap items-end gap-3 p-3 rounded-lg bg-[#0b0713] border ${fieldErrors.slots ? "border-red-500" : "border-[#1f1830]"}`}
+              >
                 <div className="flex-1 min-w-[120px]">
                   <span className="text-xs text-slate-500">Day</span>
                   <select
@@ -199,6 +233,7 @@ const CreateClass = () => {
               </div>
             ))}
           </div>
+          {fieldErrors.slots && <p className="mt-1 text-sm text-red-400">{fieldErrors.slots}</p>}
         </div>
 
         <div className="flex gap-3">

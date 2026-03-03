@@ -7,15 +7,18 @@ import {
 
 const ClassCard = ({ data }) => (
   <div className="group relative bg-[#150a2e] border border-white/10 rounded-2xl overflow-hidden hover:border-cyan-500/30 transition-all duration-300 hover:-translate-y-1 shadow-lg cursor-pointer">
-    {/* Card Header */}
-    <div className={`h-24 sm:h-28 bg-gradient-to-r ${data.gradient} p-3 sm:p-4 relative`}>
-      <div className="flex justify-between items-start">
-        <h3 className="text-lg sm:text-xl font-bold text-white truncate w-3/4">{data.name}</h3>
+    {/* Card Header — cover image or gradient */}
+    <div className={`h-24 sm:h-28 p-3 sm:p-4 relative overflow-hidden ${!data.coverUrl ? `bg-gradient-to-r ${data.gradient}` : "bg-[#1f1830]"}`}>
+      {data.coverUrl ? (
+        <img src={data.coverUrl} alt={data.name} className="absolute inset-0 w-full h-full object-cover" />
+      ) : null}
+      <div className="relative z-10 flex justify-between items-start">
+        <h3 className="text-lg sm:text-xl font-bold text-white truncate w-3/4 drop-shadow-sm">{data.name}</h3>
         <button type="button" className="p-1 hover:bg-black/20 rounded-full text-white/80 transition">
           <MoreVertical size={18} />
         </button>
       </div>
-      <p className="text-white/80 text-xs sm:text-sm mt-1 flex items-center gap-1">
+      <p className="relative z-10 text-white/80 text-xs sm:text-sm mt-1 flex items-center gap-1 drop-shadow-sm">
         <User size={12} /> {data.instructor}
       </p>
     </div>

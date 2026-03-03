@@ -254,7 +254,7 @@ const UploadAssignment = () => {
 
   return (
     <div className="max-w-3xl">
-      <h2 className="text-2xl font-semibold mb-4">Upload Assignment</h2>
+      <h2 className="text-2xl font-semibold mb-4">AI Assignment Generator</h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

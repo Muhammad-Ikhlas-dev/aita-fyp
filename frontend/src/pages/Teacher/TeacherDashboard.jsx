@@ -28,6 +28,15 @@ function formatDue(deadline) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined });
 }
 
+/** Date + time only (e.g. "14 Mar, 11:59 PM"), no "Today"/"Tomorrow"/weekday. */
+function formatDueDateOnly(deadline) {
+  if (!deadline) return "—";
+  const d = new Date(deadline);
+  const dateStr = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `${dateStr}, ${timeStr}`;
+}
+
 const TeacherDashboard = () => {
   const [classes, setClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(true);
@@ -35,6 +44,9 @@ const TeacherDashboard = () => {
   const [assignments, setAssignments] = useState([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [assignmentsError, setAssignmentsError] = useState(null);
+  const [submissionCounts, setSubmissionCounts] = useState({});
+  const [quizzes, setQuizzes] = useState([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(true);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   // API: GET /api/classes?createdBy= — load teacher's classes for "Your Classes" card on mount
@@ -96,10 +108,45 @@ const TeacherDashboard = () => {
     fetchAssignments();
   }, []);
 
-  const recentSubmissions = [
-    { id: 1, student: "Sara Khan", assignment: "Edge Detection", time: "2h ago", grade: "Pending" },
-    { id: 2, student: "Ali Nawaz", assignment: "Backpropagation Essay", time: "1d ago", grade: "A-" },
-  ];
+  // API: GET /api/quizzes?createdBy= — load teacher's published quizzes
+  useEffect(() => {
+    if (user.role !== "teacher" || !user.id) {
+      setQuizzes([]);
+      setQuizzesLoading(false);
+      return;
+    }
+    setQuizzesLoading(true);
+    fetch(`${API_BASE}/api/quizzes?createdBy=${encodeURIComponent(user.id)}`)
+      .then((res) => res.json())
+      .then((result) => {
+        if (result.quizzes) setQuizzes(result.quizzes || []);
+        else setQuizzes([]);
+      })
+      .catch(() => setQuizzes([]))
+      .finally(() => setQuizzesLoading(false));
+  }, []);
+
+  // Fetch submission counts for upcoming assignments (future deadlines only)
+  useEffect(() => {
+    const now = new Date();
+    const upcoming = (assignments || []).filter((a) => a.deadline && new Date(a.deadline) > now);
+    const ids = upcoming.map((a) => a._id).filter(Boolean);
+    if (ids.length === 0) {
+      setSubmissionCounts({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/submissions/counts?assignmentIds=${ids.join(",")}`);
+        const data = await res.json();
+        if (!cancelled && data.counts) setSubmissionCounts(data.counts);
+      } catch {
+        if (!cancelled) setSubmissionCounts({});
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [assignments]);
 
   return (
     <div className="space-y-6">
@@ -110,14 +157,14 @@ const TeacherDashboard = () => {
             Create Class
           </Link>
           <Link to="/teacher/assignments" className="px-4 py-2 rounded-lg border border-slate-700">
-            Assignments
+            Create Assignment
           </Link>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <TeacherCard title="Your Classes" subtitle="Active classes & quick actions">
-          <div className="space-y-3 overflow-y-auto max-h-[280px] pr-1">
+          <div className="space-y-3 overflow-y-auto max-h-[280px] pr-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-slate-800/30 [&::-webkit-scrollbar-thumb]:bg-cyan-400/80 [&::-webkit-scrollbar-thumb]:rounded-full">
             {classesLoading ? (
               <p className="text-sm text-slate-400 py-2">Loading classes…</p>
             ) : classesError ? (
@@ -162,7 +209,7 @@ const TeacherDashboard = () => {
         </TeacherCard>
 
         <TeacherCard title="Assignments Created" subtitle="Recent & drafts">
-          <div className="flex flex-col gap-3 overflow-y-auto max-h-[280px] pr-1">
+          <div className="flex flex-col gap-3 overflow-y-auto max-h-[280px] pr-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-slate-800/30 [&::-webkit-scrollbar-thumb]:bg-cyan-400/80 [&::-webkit-scrollbar-thumb]:rounded-full">
             {assignmentsLoading ? (
               <p className="text-sm text-slate-400 py-2">Loading assignments…</p>
             ) : assignmentsError ? (
@@ -198,48 +245,93 @@ const TeacherDashboard = () => {
           </div>
         </TeacherCard>
 
-        <TeacherCard title="Quizzes & AI Check" subtitle="Upload quizzes and let AI pre-check submissions">
-          <div className="space-y-3 overflow-y-auto max-h-[280px] pr-1">
-            <div className="p-3 bg-[#0b0713] rounded-md border border-[#1f1830]">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium">Weekly MCQ - 1</div>
-                  <div className="text-xs text-slate-400">Class: Neural Networks</div>
-                </div>
-                <div className="text-xs text-slate-400">AI Check: Enabled</div>
-              </div>
-            </div>
-
-            <div>
-              <Link to="/teacher/quizzes" className="text-sm text-sky-300">Manage quizzes →</Link>
-            </div>
+        <TeacherCard title="Quizzes & AI Check" subtitle="Published quizzes by class">
+          <div className="space-y-3 overflow-y-auto max-h-[280px] pr-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-slate-800/30 [&::-webkit-scrollbar-thumb]:bg-cyan-400/80 [&::-webkit-scrollbar-thumb]:rounded-full">
+            {quizzesLoading ? (
+              <p className="text-sm text-slate-400 py-2">Loading quizzes…</p>
+            ) : quizzes.length === 0 ? (
+              <p className="text-sm text-slate-400 py-2">No quizzes published yet.</p>
+            ) : (
+              quizzes.map((q) => {
+                const classIds = q.classIds || [];
+                const classTitles = classIds
+                  .map((id) => classes.find((c) => String(c._id) === String(id))?.title)
+                  .filter(Boolean);
+                const classLabel = classTitles.length ? classTitles.join(", ") : "—";
+                const subjectLabel =
+                  classIds.length === 0
+                    ? "—"
+                    : classIds.length === 1
+                      ? (classes.find((c) => String(c._id) === String(classIds[0]))?.subject || "—")
+                      : classIds
+                          .map((id) => classes.find((c) => String(c._id) === String(id))?.subject)
+                          .filter(Boolean)
+                          .join(", ") || "—";
+                return (
+                  <div
+                    key={q._id}
+                    className="p-3 bg-[#0b0713] rounded-md border border-[#1f1830]"
+                  >
+                    <div className="font-medium text-white truncate">{q.title}</div>
+                    <div className="text-xs text-slate-400 mt-1">Class: {classLabel}</div>
+                    <div className="text-xs text-slate-400">Subject: {subjectLabel}</div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </TeacherCard>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TeacherCard title="Recent Submissions" subtitle="Quick grade & review">
-          <div className="space-y-2">
-            {recentSubmissions.map((s) => (
-              <div key={s.id} className="p-3 bg-[#0b0713] rounded-md border border-[#1f1830] flex items-center justify-between">
-                <div>
-                  <div className="font-medium">{s.student}</div>
-                  <div className="text-xs text-slate-400">{s.assignment} • {s.time}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-sm text-slate-300">{s.grade}</div>
-                  <button className="px-3 py-1 bg-sky-600/90 rounded text-sm">Review</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </TeacherCard>
-
+      <div className="grid grid-cols-1 gap-6">
         <TeacherCard title="Upcoming Deadlines" subtitle="Keep track">
-          <ul className="space-y-3">
-            <li className="flex justify-between text-slate-300">Edge Detection Algorithm <span className="text-sm">Today, 11:59 PM</span></li>
-            <li className="flex justify-between text-slate-300">Backpropagation Essay <span className="text-sm">Tomorrow, 5:00 PM</span></li>
-            <li className="flex justify-between text-slate-300">Weekly MCQ <span className="text-sm">Fri, 9:00 AM</span></li>
+          <ul
+            className="space-y-3 overflow-y-auto max-h-[280px] pr-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-slate-800/30 [&::-webkit-scrollbar-thumb]:bg-cyan-400/80 [&::-webkit-scrollbar-thumb]:rounded-full"
+          >
+            {assignmentsLoading ? (
+              <li className="text-sm text-slate-400 py-2">Loading…</li>
+            ) : (() => {
+              const now = new Date();
+              const sorted = [...(assignments || [])]
+                .filter((a) => a.deadline && new Date(a.deadline) > now)
+                .sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+              if (sorted.length === 0) {
+                return <li className="text-sm text-slate-400 py-2">No upcoming deadlines.</li>;
+              }
+              return sorted.map((a) => {
+                const classIds = a.classIds || [];
+                const classTitles = classIds
+                  .map((id) => classes.find((c) => String(c._id) === String(id))?.title)
+                  .filter(Boolean);
+                const classLabel = classTitles.length ? classTitles.join(", ") : "—";
+                const subjectLabel =
+                  classIds.length === 0
+                    ? "—"
+                    : classIds.length === 1
+                      ? (classes.find((c) => String(c._id) === String(classIds[0]))?.subject || "—")
+                      : classIds
+                          .map((id) => classes.find((c) => String(c._id) === String(id))?.subject)
+                          .filter(Boolean)
+                          .join(", ") || "—";
+                const count = submissionCounts[a._id] ?? 0;
+                return (
+                  <li
+                    key={a._id}
+                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 rounded-md bg-[#0b0713] border border-[#1f1830] text-slate-300"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{a.title}</div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-slate-500">
+                        <span>Class: {classLabel}</span>
+                        <span>Subject: {subjectLabel}</span>
+                        <span>Submissions: {count}</span>
+                      </div>
+                    </div>
+                    <span className="text-sm text-slate-400 shrink-0">{formatDueDateOnly(a.deadline)}</span>
+                  </li>
+                );
+              });
+            })()}
           </ul>
         </TeacherCard>
       </div>

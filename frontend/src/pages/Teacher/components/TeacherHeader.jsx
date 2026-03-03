@@ -23,10 +23,10 @@ const TeacherHeader = ({ toggleSidebar }) => {
 
       <div className="flex items-center gap-4">
 
-        <button className="p-2 rounded-md hover:bg-white/3 relative">
+        {/* <button className="p-2 rounded-md hover:bg-white/3 relative">
           <Bell size={18} />
           <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full" />
-        </button>
+        </button> */}
 
         <div className="flex items-center gap-2 cursor-pointer">
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-400 to-sky-600 flex items-center justify-center text-[#071026] font-semibold">
@@ -34,7 +34,6 @@ const TeacherHeader = ({ toggleSidebar }) => {
           </div>
           <div className="hidden md:block">
             <div className="text-sm font-medium">{`${JSON.parse(localStorage.getItem("user")).fullName || "Teacher Aria"}`}</div>
-            <div className="text-xs text-slate-400">Mathematics</div>
           </div>
         </div>
       </div>

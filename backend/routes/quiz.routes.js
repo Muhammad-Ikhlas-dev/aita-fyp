@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require("mongoose");
 const Quiz = require("../schemas/Quiz");
 const QuizSubmission = require("../schemas/QuizSubmission");
+const Student = require("../schemas/Student");
 const { generateAIContent } = require("../services/aiService");
 
 // 1. GENERATE QUIZ CONTENT (AI Powered)
@@ -97,6 +98,43 @@ router.get("/", async (req, res) => {
     res.json({ success: true, quizzes: quizzesWithStatus });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 3b. GET QUIZ SUBMISSIONS LIST (for teacher — student names + marks)
+router.get("/submissions/list", async (req, res) => {
+  try {
+    const { quizId } = req.query;
+    if (!quizId || !mongoose.Types.ObjectId.isValid(quizId)) {
+      return res.status(400).json({ success: false, message: "Valid quizId is required" });
+    }
+    const list = await QuizSubmission.find({ quizId: new mongoose.Types.ObjectId(quizId) })
+      .select("studentId score totalPoints status submittedAt")
+      .sort({ submittedAt: -1 })
+      .lean();
+    const studentIds = [...new Set(list.map((s) => s.studentId?.toString()).filter(Boolean))];
+    const studentsFromDb = await Student.find({ _id: { $in: studentIds } })
+      .select("_id fullName email rollNo")
+      .lean();
+    const studentMap = new Map(studentsFromDb.map((st) => [st._id.toString(), st]));
+    const submissions = list.map((s) => {
+      const student = s.studentId ? studentMap.get(s.studentId.toString()) : null;
+      return {
+        _id: s._id,
+        studentId: s.studentId,
+        studentName: student?.fullName ?? "—",
+        email: student?.email ?? "",
+        rollNo: student?.rollNo ?? student?.roll_no ?? "",
+        score: s.score,
+        totalPoints: s.totalPoints,
+        status: s.status,
+        submittedAt: s.submittedAt,
+      };
+    });
+    res.json({ success: true, submissions, count: submissions.length });
+  } catch (error) {
+    console.error("Quiz submissions list error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to list quiz submissions" });
   }
 });
 

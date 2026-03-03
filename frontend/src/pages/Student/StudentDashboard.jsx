@@ -45,6 +45,8 @@ const StudentDashboard = () => {
           gradient: GRADIENTS[i % GRADIENTS.length],
           teacherName: c.teacherName || "—",
           studentCount: c.studentCount ?? 0,
+          cover: c.cover || null,
+          coverUrl: c.cover ? `${API_BASE}${c.cover}` : null,
         }))
       );
     } catch (err) {

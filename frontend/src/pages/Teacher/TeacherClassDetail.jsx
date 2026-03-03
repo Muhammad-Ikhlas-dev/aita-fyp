@@ -54,6 +54,12 @@ const TeacherClassDetail = () => {
   const [submissionsList, setSubmissionsList] = useState([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
 
+  const [quizzes, setQuizzes] = useState([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(false);
+  const [quizSubmissionsModal, setQuizSubmissionsModal] = useState(null); // { quizId, title }
+  const [quizSubmissionsList, setQuizSubmissionsList] = useState([]);
+  const [quizSubmissionsLoading, setQuizSubmissionsLoading] = useState(false);
+
   const [plagiarismLoading, setPlagiarismLoading] = useState(false);
   const [plagiarismResults, setPlagiarismResults] = useState(null); // { assignmentTitle, totalSubmissions, results, studentSummary }
   const [showPlagiarismModal, setShowPlagiarismModal] = useState(false);
@@ -150,6 +156,42 @@ const TeacherClassDetail = () => {
     setPlagiarismResults(null);
   };
 
+  const openQuizSubmissionsModal = (q) => {
+    setQuizSubmissionsModal({ quizId: q._id, title: q.title });
+    setQuizSubmissionsList([]);
+  };
+
+  const closeQuizSubmissionsModal = () => {
+    setQuizSubmissionsModal(null);
+    setQuizSubmissionsList([]);
+  };
+
+  const exportQuizResultsToCsv = () => {
+    if (!quizSubmissionsModal?.title) return;
+    const escapeCsv = (v) => {
+      const s = String(v ?? "");
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const header = "Student Name,Roll No,Score,Total,Submitted At";
+    const rows = quizSubmissionsList.map((s) => {
+      const name = escapeCsv(s.studentName);
+      const rollNo = escapeCsv(s.rollNo ?? "");
+      const score = s.score != null ? String(s.score) : "—";
+      const total = s.totalPoints != null ? String(s.totalPoints) : "—";
+      const submitted = s.submittedAt ? formatDateDMY(s.submittedAt) : "—";
+      return `${name},${rollNo},${score},${total},${escapeCsv(submitted)}`;
+    });
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${quizSubmissionsModal.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_quiz_results.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const checkPlagiarism = async () => {
     if (!submissionsModal?.assignmentId) return;
     setPlagiarismLoading(true);
@@ -190,6 +232,27 @@ const TeacherClassDetail = () => {
       });
     return () => { cancelled = true; };
   }, [submissionsModal?.assignmentId]);
+
+  // API: GET /api/quizzes/submissions/list?quizId= — load quiz submissions when modal opens
+  useEffect(() => {
+    if (!quizSubmissionsModal?.quizId) return;
+    let cancelled = false;
+    setQuizSubmissionsLoading(true);
+    fetch(
+      `${API_BASE}/api/quizzes/submissions/list?quizId=${encodeURIComponent(quizSubmissionsModal.quizId)}`
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled && data.success) setQuizSubmissionsList(data.submissions || []);
+      })
+      .catch(() => {
+        if (!cancelled) setQuizSubmissionsList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setQuizSubmissionsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [quizSubmissionsModal?.quizId]);
 
   const saveEditDeadline = async (e) => {
     e.preventDefault();
@@ -265,7 +328,31 @@ const TeacherClassDetail = () => {
     }
   };
 
-  // API: GET /api/classes/:id + class students + assignments — load class detail and roster when classId changes
+  // API: GET /api/quizzes?classId= & createdBy= — load teacher's quizzes for this class
+  const fetchQuizzes = async () => {
+    if (!classId) return;
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    if (user.role !== "teacher" || !user.id) return;
+    setQuizzesLoading(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/quizzes?classId=${encodeURIComponent(classId)}&createdBy=${encodeURIComponent(user.id)}`
+      );
+      const result = await res.json();
+      if (!res.ok) {
+        setQuizzes([]);
+        return;
+      }
+      setQuizzes(result.quizzes || []);
+    } catch (err) {
+      console.error("Fetch quizzes error:", err);
+      setQuizzes([]);
+    } finally {
+      setQuizzesLoading(false);
+    }
+  };
+
+  // API: GET /api/classes/:id + class students + assignments + quizzes — load class detail and roster when classId changes
   useEffect(() => {
     const fetchClass = async () => {
       setLoading(true);
@@ -282,6 +369,7 @@ const TeacherClassDetail = () => {
         setClassDetail(result.class);
         await fetchClassStudents();
         await fetchAssignments();
+        await fetchQuizzes();
       } catch (err) {
         console.error("Fetch class error:", err);
         setError("Network error. Please try again.");
@@ -779,13 +867,112 @@ const TeacherClassDetail = () => {
         </div>
       )}
 
+      {/* Quiz submissions modal — student marks */}
+      {quizSubmissionsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-[#0f0b1a] border border-[#1f1830] rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b border-[#1f1830]">
+              <h3 className="text-lg font-semibold text-white">
+                Quiz submissions — {quizSubmissionsModal.title}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={exportQuizResultsToCsv}
+                  disabled={quizSubmissionsList.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600/30 text-sm disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  title="Download results as CSV"
+                >
+                  <Download size={16} />
+                  Export results
+                </button>
+                <button
+                  type="button"
+                  onClick={closeQuizSubmissionsModal}
+                  className="p-1 text-slate-400 hover:text-white rounded"
+                >
+                  <X size={22} />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 overflow-auto flex-1">
+              {quizSubmissionsLoading ? (
+                <p className="text-slate-400 text-sm py-6 text-center">Loading submissions…</p>
+              ) : quizSubmissionsList.length === 0 ? (
+                <p className="text-slate-500 text-sm py-6 text-center">No submissions yet for this quiz.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {quizSubmissionsList.map((s) => (
+                    <li
+                      key={s._id}
+                      className="flex items-center justify-between gap-4 p-3 rounded-lg bg-[#0b0713] border border-[#1f1830]"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-white truncate">{s.studentName}</p>
+                        <p className="text-slate-400 text-sm truncate">
+                          Roll No: {(s.rollNo ?? "").trim() || "—"}
+                        </p>
+                        <p className="text-slate-500 text-xs mt-0.5">
+                          {s.submittedAt ? formatDateDMY(s.submittedAt) : "—"}
+                        </p>
+                      </div>
+                      <span className="shrink-0 w-20 text-center font-semibold text-purple-400">
+                        {s.score != null && s.totalPoints != null
+                          ? `${s.score} / ${s.totalPoints}`
+                          : "—"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tab content: Quizzes */}
       {activeTab === "quizzes" && (
         <div>
           <h2 className="text-xl font-semibold text-white mb-4">Quizzes</h2>
-          <p className="text-slate-500 text-sm py-8 text-center rounded-xl bg-[#0b0713] border border-[#1f1830]">
-            No quizzes for this class yet.
-          </p>
+          {quizzesLoading ? (
+            <p className="text-slate-400 text-sm py-4">Loading quizzes…</p>
+          ) : quizzes.length === 0 ? (
+            <p className="text-slate-500 text-sm py-4">No quizzes published to this class yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {quizzes.map((q) => (
+                <div
+                  key={q._id}
+                  className="flex gap-4 p-4 rounded-xl bg-[#0b0713] border border-[#1f1830]"
+                >
+                  <div className="w-28 h-28 shrink-0 rounded-lg bg-[#1f1830] border border-[#2a2340] flex flex-col items-center justify-center text-slate-500 overflow-hidden">
+                    <HelpCircle size={32} className="text-purple-500/70 mb-1" />
+                    <span className="text-[10px] px-1 text-center truncate w-full">Quiz</span>
+                  </div>
+                  <div className="min-w-0 flex-1 flex flex-col justify-center">
+                    <h3 className="font-medium text-white truncate">{q.title}</h3>
+                    <p className="text-slate-400 text-sm mt-1 flex items-center gap-1.5">
+                      <Calendar size={14} className="shrink-0 text-purple-400" />
+                      Due: {q.deadline ? formatDateDMY(q.deadline) : "—"}
+                    </p>
+                    <p className="text-slate-500 text-xs mt-0.5">
+                      Time limit: {q.timeLimit ?? 30} min · {(q.questions || []).length} questions
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 self-center">
+                    <button
+                      type="button"
+                      onClick={() => openQuizSubmissionsModal(q)}
+                      className="p-2 text-slate-400 hover:text-purple-400 rounded-lg hover:bg-white/5 transition"
+                      title="View submissions"
+                    >
+                      <FolderOpen size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -257,6 +257,30 @@ router.post('/', uploadSubmission.single('file'), async (req, res) => {
   }
 });
 
+// GET /api/submissions/counts?assignmentIds=id1,id2 — submission counts per assignment (for dashboard)
+router.get('/counts', async (req, res) => {
+  try {
+    const raw = req.query.assignmentIds;
+    const ids = (typeof raw === 'string' ? raw.split(',') : Array.isArray(raw) ? raw : [])
+      .map((id) => id?.trim()).filter((id) => id && mongoose.Types.ObjectId.isValid(id));
+    if (ids.length === 0) {
+      return res.json({ success: true, counts: {} });
+    }
+    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+    const list = await AssignmentSubmission.aggregate([
+      { $match: { assignmentId: { $in: objectIds } } },
+      { $group: { _id: '$assignmentId', count: { $sum: 1 } } },
+    ]);
+    const counts = {};
+    ids.forEach((id) => { counts[id] = 0; });
+    list.forEach((row) => { counts[row._id.toString()] = row.count; });
+    res.json({ success: true, counts });
+  } catch (error) {
+    console.error('Submission counts error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to get counts' });
+  }
+});
+
 // GET /api/submissions/list?assignmentId= — list all submissions for an assignment (for teacher), with student names and rollNo from students table
 router.get('/list', async (req, res) => {
   try {
